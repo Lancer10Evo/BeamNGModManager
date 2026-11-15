@@ -21,7 +21,6 @@ public class ModManagerService
 
             string disabledDir = Path.Combine(modsPath, "_disabled");
 
-            // 1. Сканируем ВСЕ подпапки внутри mods/ (включая repo, multiplayer и т.д.), кроме _disabled
             var allFiles = Directory.GetFiles(modsPath, "*.*", SearchOption.AllDirectories)
                 .Where(f =>
                 {
@@ -37,7 +36,6 @@ public class ModManagerService
             foreach (string file in activeFiles)
                 list.Add(ParseModZip(file, isEnabled: true));
 
-            // 2. Сканируем отключённые моды в папке _disabled
             if (Directory.Exists(disabledDir))
             {
                 var activeNames = new HashSet<string>(activeFiles.Select(Path.GetFileName)!, StringComparer.OrdinalIgnoreCase);
@@ -74,13 +72,35 @@ public class ModManagerService
         };
 
         if (!fi.Extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            item.Category = "📦 Архив";
             return item;
+        }
 
         try
         {
             using var archive = ZipFile.OpenRead(zipPath);
 
-            // 1. Сначала ищем mod_info/<id>/info.json, а затем vehicles/<car>/info.json или levels/<map>/info.json
+            // АДДОН АВТО-КАТЕГОРИЗАЦИИ: определяем тип мода по внутренним папкам
+            bool hasVehicles = false, hasLevels = false, hasLuaOrUi = false, hasSound = false;
+            foreach (var entry in archive.Entries)
+            {
+                string path = entry.FullName.Replace('\\', '/').TrimStart('/');
+                if (path.StartsWith("vehicles/", StringComparison.OrdinalIgnoreCase)) hasVehicles = true;
+                else if (path.StartsWith("levels/", StringComparison.OrdinalIgnoreCase)) hasLevels = true;
+                else if (path.StartsWith("art/sound/", StringComparison.OrdinalIgnoreCase)) hasSound = true;
+                else if (path.StartsWith("lua/", StringComparison.OrdinalIgnoreCase) ||
+                         path.StartsWith("ui/", StringComparison.OrdinalIgnoreCase) ||
+                         path.StartsWith("scripts/", StringComparison.OrdinalIgnoreCase)) hasLuaOrUi = true;
+            }
+
+            if (hasLevels) item.Category = "🗺️ Карта";
+            else if (hasVehicles) item.Category = "🚗 Авто";
+            else if (hasSound) item.Category = "🔊 Звук";
+            else if (hasLuaOrUi) item.Category = "⚙️ Скрипт";
+            else item.Category = "📦 Мод";
+
+            // Парсинг info.json (из mod_info/, vehicles/* или levels/*)
             var infoEntries = archive.Entries
                 .Where(e => e.Name.Equals("info.json", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(e => e.FullName.StartsWith("mod_info/", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
@@ -126,7 +146,7 @@ public class ModManagerService
                 catch { }
             }
 
-            // 2. Ищем превью-картинку (в mod_info/, vehicles/*/default.png|jpg или levels/*)
+            // Поиск превью-картинки
             var iconEntry = archive.Entries
                 .Where(e =>
                     (e.Name.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||

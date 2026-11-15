@@ -37,6 +37,7 @@ public partial class MainWindow : Window
         ChkHardlinks.IsChecked = _pathResolver.Config.UseHardlinks;
 
         RefreshProfilesCombo();
+        RefreshPresetsCombo();
         ApplyLocalization();
         await ReloadModsListAsync();
     }
@@ -50,6 +51,12 @@ public partial class MainWindow : Window
             int idx = Math.Clamp(_pathResolver.Config.SelectedProfileIndex, 0, _pathResolver.Config.Profiles.Count - 1);
             CmbProfiles.SelectedIndex = idx;
         }
+    }
+
+    private void RefreshPresetsCombo()
+    {
+        CmbPresets.ItemsSource = null;
+        CmbPresets.ItemsSource = _pathResolver.Config.Presets;
     }
 
     private void ApplyLocalization()
@@ -81,7 +88,24 @@ public partial class MainWindow : Window
     {
         if (ActiveProfile == null) return;
         _allMods = await _modManager.LoadModsAsync(ActiveProfile.ModsPath);
+        ActiveProfile.ModsCount = _allMods.Count;
+        UpdateDashboardStats();
         ApplySearchAndFilter();
+    }
+
+    private void UpdateDashboardStats()
+    {
+        int total = _allMods.Count;
+        int active = _allMods.Count(m => m.IsEnabled);
+        int disabled = total - active;
+        long totalBytes = _allMods.Sum(m => m.SizeBytes);
+
+        TxtStatTotal.Text = total.ToString();
+        TxtStatActive.Text = active.ToString();
+        TxtStatDisabled.Text = disabled.ToString();
+
+        double mb = totalBytes / 1024.0 / 1024.0;
+        TxtStatSize.Text = mb >= 1024 ? $"{mb / 1024.0:F2} GB" : $"{mb:F1} MB";
     }
 
     private void ApplySearchAndFilter()
@@ -94,12 +118,16 @@ public partial class MainWindow : Window
         {
             if (filterIndex == 1 && !m.IsEnabled) return false;
             if (filterIndex == 2 && m.IsEnabled) return false;
+            if (filterIndex == 3 && !m.Category.Contains("Авто")) return false;
+            if (filterIndex == 4 && !m.Category.Contains("Карта")) return false;
+            if (filterIndex == 5 && !m.Category.Contains("Скрипт")) return false;
 
             if (!string.IsNullOrEmpty(query))
             {
                 return m.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                        m.Author.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                       m.FileName.Contains(query, StringComparison.OrdinalIgnoreCase);
+                       m.FileName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                       m.Category.Contains(query, StringComparison.OrdinalIgnoreCase);
             }
             return true;
         }).ToList();
@@ -107,7 +135,7 @@ public partial class MainWindow : Window
         GridMods.ItemsSource = filtered;
     }
 
-    // --- Модуль 2: Умная установка (Кнопка + Drag-and-Drop) ---
+    // --- Установка модов ---
     private async void BtnInstallMods_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new OpenFileDialog
@@ -161,15 +189,40 @@ public partial class MainWindow : Window
         }
     }
 
-    // --- Модуль 3: Включение/отключение и удаление модов ---
+    // --- Включение / Отключение (Одиночное и Массовое) ---
     private void ModCheckBox_Click(object sender, RoutedEventArgs e)
     {
         if (ActiveProfile == null) return;
         if (sender is CheckBox cb && cb.DataContext is ModItem mod)
         {
             _modManager.ToggleModState(mod, ActiveProfile.ModsPath, _pathResolver.Config.UseHardlinks);
+            UpdateDashboardStats();
             ApplySearchAndFilter();
         }
+    }
+
+    private void BtnEnableAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (ActiveProfile == null) return;
+        foreach (var mod in _allMods.Where(m => !m.IsEnabled))
+        {
+            mod.IsEnabled = true;
+            _modManager.ToggleModState(mod, ActiveProfile.ModsPath, _pathResolver.Config.UseHardlinks);
+        }
+        UpdateDashboardStats();
+        ApplySearchAndFilter();
+    }
+
+    private void BtnDisableAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (ActiveProfile == null) return;
+        foreach (var mod in _allMods.Where(m => m.IsEnabled))
+        {
+            mod.IsEnabled = false;
+            _modManager.ToggleModState(mod, ActiveProfile.ModsPath, _pathResolver.Config.UseHardlinks);
+        }
+        UpdateDashboardStats();
+        ApplySearchAndFilter();
     }
 
     private async void BtnDeleteMod_Click(object sender, RoutedEventArgs e)
@@ -189,7 +242,60 @@ public partial class MainWindow : Window
         }
     }
 
-    // --- Модуль 1: Управление профилями ---
+    // --- АДДОН: Менеджер пресетов (Сборок модов) ---
+    private void BtnSavePreset_Click(object sender, RoutedEventArgs e)
+    {
+        var enabledFiles = _allMods.Where(m => m.IsEnabled).Select(m => m.FileName).ToList();
+        var preset = new ModPreset
+        {
+            Name = $"Сборка #{_pathResolver.Config.Presets.Count + 1} ({DateTime.Now:dd.MM HH:mm})",
+            EnabledModFiles = enabledFiles
+        };
+
+        _pathResolver.Config.Presets.Add(preset);
+        _pathResolver.SaveConfig();
+        RefreshPresetsCombo();
+        CmbPresets.SelectedItem = preset;
+
+        MessageBox.Show($"Пресет «{preset.Name}» сохранён!\nАктивных модов в сборке: {enabledFiles.Count}",
+            Title, MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void CmbPresets_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ActiveProfile == null) return;
+        if (CmbPresets.SelectedItem is ModPreset preset)
+        {
+            var activeSet = new HashSet<string>(preset.EnabledModFiles, StringComparer.OrdinalIgnoreCase);
+            foreach (var mod in _allMods)
+            {
+                bool shouldEnable = activeSet.Contains(mod.FileName);
+                if (mod.IsEnabled != shouldEnable)
+                {
+                    mod.IsEnabled = shouldEnable;
+                    _modManager.ToggleModState(mod, ActiveProfile.ModsPath, _pathResolver.Config.UseHardlinks);
+                }
+            }
+            UpdateDashboardStats();
+            ApplySearchAndFilter();
+        }
+    }
+
+    // --- АДДОН: Тестер / Симулятор Лицензии (Steam & Epic Games) ---
+    private void BtnTestLicense_Click(object sender, RoutedEventArgs e)
+    {
+        string report = _pathResolver.RunLicenseSimulatorTest();
+        MessageBox.Show(report, "Диагностика и Симулятор Лицензий (Steam / Epic)",
+            MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    // --- Управление профилями и папкой ---
+    private void BtnOpenFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (ActiveProfile == null || !Directory.Exists(ActiveProfile.ModsPath)) return;
+        Process.Start(new ProcessStartInfo("explorer.exe", ActiveProfile.ModsPath) { UseShellExecute = true });
+    }
+
     private async void CmbProfiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (CmbProfiles.SelectedIndex >= 0)
@@ -231,7 +337,7 @@ public partial class MainWindow : Window
         await ReloadModsListAsync();
     }
 
-    // --- Модуль 4: Очистка кэша, конфликты, обновления и запуск ---
+    // --- Обслуживание ---
     private void BtnClearCache_Click(object sender, RoutedEventArgs e)
     {
         if (ActiveProfile == null) return;
