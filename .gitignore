@@ -1,0 +1,6 @@
+﻿bin/
+obj/
+.vs/
+*.user
+modmanager_config.json
+logo.png
