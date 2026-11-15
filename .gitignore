@@ -4,3 +4,5 @@ obj/
 *.user
 modmanager_config.json
 logo.png
+
+*.exe

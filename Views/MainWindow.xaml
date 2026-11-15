@@ -1,4 +1,4 @@
-<Window x:Class="BeamNGModManager.Views.MainWindow"
+﻿<Window x:Class="BeamNGModManager.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="BeamNG.drive Mod Manager" Height="760" Width="1180"
@@ -16,7 +16,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Верхняя карточка: Брендинг, Профили и Язык -->
+        <!-- Р’РµСЂС…РЅСЏСЏ РєР°СЂС‚РѕС‡РєР°: Р‘СЂРµРЅРґРёРЅРі, РџСЂРѕС„РёР»Рё Рё РЇР·С‹Рє -->
         <Border Grid.Row="0" Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}"
                 BorderThickness="1" CornerRadius="12" Padding="16,12" Margin="0,0,0,14">
             <Grid>
@@ -29,20 +29,20 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Логотип и название -->
+                <!-- Р›РѕРіРѕС‚РёРї Рё РЅР°Р·РІР°РЅРёРµ -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,20,0">
                     <Image Source="pack://application:,,,/icon.ico" Width="32" Height="32"
                            VerticalAlignment="Center" Margin="0,0,10,0" RenderOptions.BitmapScalingMode="HighQuality"/>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="BeamNG.drive" FontWeight="Bold" FontSize="15" Foreground="{StaticResource TextPrimary}"/>
-                        <TextBlock Text="MOD MANAGER" FontWeight="Bold" FontSize="10" Foreground="{StaticResource AccentOrange}"/>
+                        <TextBlock Text="MOD MANAGER v1.1.0" FontWeight="Bold" FontSize="10" Foreground="{StaticResource AccentOrange}"/>
                     </StackPanel>
                 </StackPanel>
 
-                <TextBlock x:Name="LblProfile" Grid.Column="1" Text="Профиль:" VerticalAlignment="Center"
+                <TextBlock x:Name="LblProfile" Grid.Column="1" Text="РџСЂРѕС„РёР»СЊ:" VerticalAlignment="Center"
                            Foreground="{StaticResource TextSecondary}" FontWeight="SemiBold" Margin="0,0,10,0"/>
 
-                <!-- Красивый выпадающий список профилей с бейджем количества модов и обрезкой длинного пути -->
+                <!-- РљСЂР°СЃРёРІС‹Р№ РІС‹РїР°РґР°СЋС‰РёР№ СЃРїРёСЃРѕРє РїСЂРѕС„РёР»РµР№ СЃ Р±РµР№РґР¶РµРј РєРѕР»РёС‡РµСЃС‚РІР° РјРѕРґРѕРІ Рё РѕР±СЂРµР·РєРѕР№ РґР»РёРЅРЅРѕРіРѕ РїСѓС‚Рё -->
                 <ComboBox x:Name="CmbProfiles" Grid.Column="2" Height="36" VerticalContentAlignment="Center"
                           FontSize="13" Margin="0,0,10,0" SelectionChanged="CmbProfiles_SelectionChanged">
                     <ComboBox.ItemTemplate>
@@ -68,10 +68,10 @@
                     </ComboBox.ItemTemplate>
                 </ComboBox>
 
-                <Button x:Name="BtnAddProfile" Grid.Column="3" Content="Добавить профиль"
+                <Button x:Name="BtnAddProfile" Grid.Column="3" Content="Р”РѕР±Р°РІРёС‚СЊ РїСЂРѕС„РёР»СЊ"
                         Style="{StaticResource ModernButton}" Margin="0,0,8,0" Click="BtnAddProfile_Click"/>
 
-                <Button x:Name="BtnAutoDetect" Grid.Column="4" Content="Автопоиск путей"
+                <Button x:Name="BtnAutoDetect" Grid.Column="4" Content="РђРІС‚РѕРїРѕРёСЃРє РїСѓС‚РµР№"
                         Style="{StaticResource ModernButton}" Margin="0,0,12,0" Click="BtnAutoDetect_Click"/>
 
                 <ComboBox x:Name="CmbLanguage" Grid.Column="5" Width="76" Height="36"
@@ -80,7 +80,7 @@
             </Grid>
         </Border>
 
-        <!-- Панель действий: Установка, Поиск, Фильтр, Тумблер Hardlinks -->
+        <!-- РџР°РЅРµР»СЊ РґРµР№СЃС‚РІРёР№: РЈСЃС‚Р°РЅРѕРІРєР°, РџРѕРёСЃРє, Р¤РёР»СЊС‚СЂ, РўСѓРјР±Р»РµСЂ Hardlinks -->
         <Grid Grid.Row="1" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
@@ -89,7 +89,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <Button x:Name="BtnInstallMods" Grid.Column="0" Content="＋ Установить моды (.zip/.rar/.7z)"
+            <Button x:Name="BtnInstallMods" Grid.Column="0" Content="пј‹ РЈСЃС‚Р°РЅРѕРІРёС‚СЊ РјРѕРґС‹ (.zip/.rar/.7z)"
                     Style="{StaticResource PrimaryOrangeButton}" Padding="18,10" Click="BtnInstallMods_Click"/>
 
             <TextBox x:Name="TxtSearch" Grid.Column="1" Style="{StaticResource DarkTextBox}"
@@ -97,9 +97,9 @@
 
             <ComboBox x:Name="CmbFilter" Grid.Column="2" Width="175" Height="38" VerticalContentAlignment="Center"
                       FontSize="13" SelectionChanged="CmbFilter_SelectionChanged" Margin="0,0,16,0">
-                <ComboBoxItem x:Name="FilterAll" Content="Все моды" IsSelected="True"/>
-                <ComboBoxItem x:Name="FilterActive" Content="Только активные"/>
-                <ComboBoxItem x:Name="FilterDisabled" Content="Отключённые"/>
+                <ComboBoxItem x:Name="FilterAll" Content="Р’СЃРµ РјРѕРґС‹" IsSelected="True"/>
+                <ComboBoxItem x:Name="FilterActive" Content="РўРѕР»СЊРєРѕ Р°РєС‚РёРІРЅС‹Рµ"/>
+                <ComboBoxItem x:Name="FilterDisabled" Content="РћС‚РєР»СЋС‡С‘РЅРЅС‹Рµ"/>
             </ComboBox>
 
             <CheckBox x:Name="ChkHardlinks" Grid.Column="3" Content="Hardlinks"
@@ -107,7 +107,7 @@
                       VerticalAlignment="Center" Checked="ChkHardlinks_Changed" Unchecked="ChkHardlinks_Changed"/>
         </Grid>
 
-        <!-- Карточка со списком модов -->
+        <!-- РљР°СЂС‚РѕС‡РєР° СЃРѕ СЃРїРёСЃРєРѕРј РјРѕРґРѕРІ -->
         <Border Grid.Row="2" Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}"
                 BorderThickness="1" CornerRadius="12" ClipToBounds="True">
             <DataGrid x:Name="GridMods" AutoGenerateColumns="False" CanUserAddRows="False"
@@ -116,7 +116,7 @@
                       GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#292933"
                       HeadersVisibility="Column" RowHeight="50" SelectionMode="Single">
                 <DataGrid.Columns>
-                    <DataGridTemplateColumn x:Name="ColActive" Header="Вкл" Width="72">
+                    <DataGridTemplateColumn x:Name="ColActive" Header="Р’РєР»" Width="72">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <CheckBox IsChecked="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}"
@@ -138,25 +138,25 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <DataGridTextColumn x:Name="ColName" Header="Название мода" Binding="{Binding DisplayName}"
+                    <DataGridTextColumn x:Name="ColName" Header="РќР°Р·РІР°РЅРёРµ РјРѕРґР°" Binding="{Binding DisplayName}"
                                         Width="2.2*" IsReadOnly="True" FontWeight="SemiBold" FontSize="13"/>
 
-                    <DataGridTextColumn x:Name="ColAuthor" Header="Автор" Binding="{Binding Author}"
+                    <DataGridTextColumn x:Name="ColAuthor" Header="РђРІС‚РѕСЂ" Binding="{Binding Author}"
                                         Width="1.1*" IsReadOnly="True" Foreground="{StaticResource TextSecondary}"/>
 
-                    <DataGridTextColumn x:Name="ColVersion" Header="Версия" Binding="{Binding Version}"
+                    <DataGridTextColumn x:Name="ColVersion" Header="Р’РµСЂСЃРёСЏ" Binding="{Binding Version}"
                                         Width="95" IsReadOnly="True" Foreground="{StaticResource AccentOrange}" FontWeight="SemiBold"/>
 
-                    <DataGridTextColumn x:Name="ColFile" Header="Файл" Binding="{Binding FileName}"
+                    <DataGridTextColumn x:Name="ColFile" Header="Р¤Р°Р№Р»" Binding="{Binding FileName}"
                                         Width="1.5*" IsReadOnly="True" Foreground="{StaticResource TextSecondary}"/>
 
-                    <DataGridTextColumn x:Name="ColSize" Header="Размер" Binding="{Binding SizeFormatted}"
+                    <DataGridTextColumn x:Name="ColSize" Header="Р Р°Р·РјРµСЂ" Binding="{Binding SizeFormatted}"
                                         Width="95" IsReadOnly="True" Foreground="{StaticResource TextSecondary}"/>
 
                     <DataGridTemplateColumn Width="70">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Button Content="✕" Style="{StaticResource DangerIconButton}"
+                                <Button Content="вњ•" Style="{StaticResource DangerIconButton}"
                                         HorizontalAlignment="Center" Click="BtnDeleteMod_Click"/>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
@@ -165,7 +165,7 @@
             </DataGrid>
         </Border>
 
-        <!-- Нижняя панель обслуживания и запуска игры -->
+        <!-- РќРёР¶РЅСЏСЏ РїР°РЅРµР»СЊ РѕР±СЃР»СѓР¶РёРІР°РЅРёСЏ Рё Р·Р°РїСѓСЃРєР° РёРіСЂС‹ -->
         <Border Grid.Row="3" Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}"
                 BorderThickness="1" CornerRadius="12" Padding="14,12" Margin="0,14,0,0">
             <Grid>
@@ -177,21 +177,21 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Button x:Name="BtnClearCache" Grid.Column="0" Content="Очистить кэш (без шейдеров)"
+                <Button x:Name="BtnClearCache" Grid.Column="0" Content="РћС‡РёСЃС‚РёС‚СЊ РєСЌС€ (Р±РµР· С€РµР№РґРµСЂРѕРІ)"
                         Style="{StaticResource ModernButton}" Margin="0,0,8,0" Click="BtnClearCache_Click"/>
 
-                <Button x:Name="BtnCheckConflicts" Grid.Column="1" Content="Проверить конфликты"
+                <Button x:Name="BtnCheckConflicts" Grid.Column="1" Content="РџСЂРѕРІРµСЂРёС‚СЊ РєРѕРЅС„Р»РёРєС‚С‹"
                         Style="{StaticResource ModernButton}" Margin="0,0,8,0" Click="BtnCheckConflicts_Click"/>
 
-                <Button x:Name="BtnCheckUpdates" Grid.Column="2" Content="Обновления"
+                <Button x:Name="BtnCheckUpdates" Grid.Column="2" Content="РћР±РЅРѕРІР»РµРЅРёСЏ"
                         Style="{StaticResource ModernButton}" Click="BtnCheckUpdates_Click"/>
 
                 <TextBlock x:Name="LblStatus" Grid.Column="3"
-                           Text="Перетащите архивы (.zip, .rar, .7z) в любое место окна"
+                           Text="РџРµСЂРµС‚Р°С‰РёС‚Рµ Р°СЂС…РёРІС‹ (.zip, .rar, .7z) РІ Р»СЋР±РѕРµ РјРµСЃС‚Рѕ РѕРєРЅР°"
                            Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"
                            Margin="18,0" TextTrimming="CharacterEllipsis"/>
 
-                <Button x:Name="BtnLaunchGame" Grid.Column="4" Content="Запустить BeamNG.drive"
+                <Button x:Name="BtnLaunchGame" Grid.Column="4" Content="Р—Р°РїСѓСЃС‚РёС‚СЊ BeamNG.drive"
                         Style="{StaticResource LaunchGreenButton}" Padding="22,10" Click="BtnLaunchGame_Click"/>
             </Grid>
         </Border>
