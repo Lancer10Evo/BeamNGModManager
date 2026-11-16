@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -9,9 +10,9 @@ namespace BeamNGModManager.Services;
 
 public enum ScanVerdict
 {
-    VerifiedSafe,      // Все проверки (включая Defender ExitCode == 0) чистые
-    UnverifiedWarning, // Критических угроз нет, но есть эвристические предупреждения или таймаут Defender
-    DangerousThreat    // Найдены бинарники (.exe/.dll/.bat), вирус Defender или прямой эксплойт в Lua -> УСТАНОВКА БЛОКИРУЕТСЯ
+    VerifiedSafe,
+    UnverifiedWarning,
+    DangerousThreat
 }
 
 public class SecurityScanReport
@@ -53,7 +54,7 @@ public class SecurityScanReport
     {
         double mb = FileSizeBytes / 1024.0 / 1024.0;
         var sb = new StringBuilder();
-        sb.AppendLine($"🛡️ ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.3)");
+        sb.AppendLine($"🛡️ ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.4)");
         sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         sb.AppendLine($"📄 Файл: {FileName} ({mb:F2} MB)");
         sb.AppendLine($"🌐 Источник: {SourceOrigin}");
@@ -71,16 +72,16 @@ public class SecurityScanReport
             : $"   ❌ БЛОКИРОВКА! Найдены исполняемые файлы: {string.Join(", ", DangerousBinariesFound.Take(5))}");
         sb.AppendLine();
 
-        sb.AppendLine($"3. Аудит скриптов (Lua: {LuaFilesScanned}, Влож. архивов: {NestedArchivesScanned}, UI .js: {UiJsFilesCount}):");
+        sb.AppendLine($"3. Лексический аудит и деобфускация Lua (Lua: {LuaFilesScanned}, Влож.: {NestedArchivesScanned}, JS: {UiJsFilesCount}):");
         if (CriticalLuaExploitsFound.Count == 0)
-            sb.AppendLine("   ✅ Критических эксплойтов (os.execute / io.popen / ffi.load) не найдено");
+            sb.AppendLine("   ✅ Критических эксплойтов (включая скобочные вызовы и склейку строк) не найдено");
         else
             sb.AppendLine($"   🚨 БЛОКИРОВКА! ОПАСНЫЙ КОД В LUA:\n   • {string.Join("\n   • ", CriticalLuaExploitsFound.Take(5))}");
 
         if (HeuristicWarnings.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"4. Эвристические замечания (не блокируют установку):");
+            sb.AppendLine($"4. Эвристические замечания:");
             sb.AppendLine($"   ⚠️ {string.Join("\n   ⚠️ ", HeuristicWarnings.Take(5))}");
         }
 
@@ -88,10 +89,10 @@ public class SecurityScanReport
         switch (Verdict)
         {
             case ScanVerdict.VerifiedSafe:
-                sb.AppendLine("✅ ВЕРДИКТ: Проверено Defender и анализатором кода. Угроз не найдено.");
+                sb.AppendLine("✅ ВЕРДИКТ: Проверено Defender и лексическим анализатором. Угроз не найдено.");
                 break;
             case ScanVerdict.UnverifiedWarning:
-                sb.AppendLine("⚠️ ВЕРДИКТ: Прямых угроз нет, но есть эвристические замечания или антивирус не подтвердил статус. Рекомендуется сверить хеш на VirusTotal.");
+                sb.AppendLine("⚠️ ВЕРДИКТ: Прямых эксплойтов нет, но статус Defender не подтверждён или есть эвристические замечания. Рекомендуется проверить хеш на VirusTotal.");
                 break;
             case ScanVerdict.DangerousThreat:
                 sb.AppendLine("⛔ ВЕРДИКТ: УСТАНОВКА ЗАБЛОКИРОВАНА! В архиве обнаружено вредоносное содержимое.");
@@ -105,35 +106,37 @@ public class SecurityScanReport
 public class SecurityScannerService
 {
     private const int MaxNestedScanDepth = 3;
-    private const long MaxSingleNestedArchiveBytes = 256L * 1024 * 1024; // 256 MB лимит на вложенный архив
-    private const long MaxTotalNestedQuotaBytes = 512L * 1024 * 1024;    // 512 MB общий бюджет на диск (0 МБ в RAM)
+    private const long MaxSingleNestedArchiveBytes = 256L * 1024 * 1024;
+    private const long MaxTotalNestedQuotaBytes = 512L * 1024 * 1024;
 
     private static readonly HashSet<string> ForbiddenBinaryExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".exe", ".dll", ".bat", ".cmd", ".ps1", ".vbs", ".vbe", ".jse", ".wsf", ".scr", ".msi", ".com", ".hta", ".pif", ".cpl"
     };
 
-    // УРОВЕНЬ 1 (БЛОКИРУЮЩИЙ): Прямые эксплойты, выполнение команд ОС, загрузка DLL и скрытый байткод
+    // УРОВЕНЬ 1 (БЛОКИРУЮЩИЙ): Работает поверх деобфусцированного и нормализованного кода
     private static readonly (string Pattern, string Description)[] CriticalLuaExploitSignatures =
     {
-        (@"os\.execute\s*\(", "os.execute() — прямой запуск системных команд ОС"),
-        (@"io\.popen\s*\(", "io.popen() — скрытый запуск процессов ОС"),
-        (@"package\.loadlib\s*\(", "package.loadlib() — подгрузка внешней DLL"),
-        (@"ffi\.load\s*\(", "ffi.load() — загрузка нативной DLL через LuaJIT FFI"),
-        (@"powershell(?:\.exe)?|cmd\.exe|wscript(?:\.exe)?|cscript(?:\.exe)?|mshta(?:\.exe)?|certutil", "Вызов системных утилит Windows из Lua"),
-        (@"\\27Lua|\x1bLua", "Скрытый прекомпилированный байткод Lua")
+        (@"(?:os|_G\.os|rawget\s*\(\s*_G\s*,\s*[""']os[""']\s*\))\s*\.\s*execute", "Вызов os.execute (прямой или через таблицу/скобки)"),
+        (@"(?:io|_G\.io|rawget\s*\(\s*_G\s*,\s*[""']io[""']\s*\))\s*\.\s*popen", "Вызов io.popen (скрытый запуск процессов)"),
+        (@"(?:package|_G\.package)\s*\.\s*loadlib", "Вызов package.loadlib (загрузка внешней DLL)"),
+        (@"ffi\s*\.\s*load\b", "Вызов ffi.load (загрузка нативной DLL через FFI)"),
+        (@"[""'](?:execute|popen|loadlib)[""']\s*\]", "Обращение к запрещённому методу execute/popen/loadlib по ключу таблицы"),
+        (@"powershell(?:\.exe)?|cmd\.exe|wscript(?:\.exe)?|cscript(?:\.exe)?|mshta(?:\.exe)?|certutil", "Вызов системных интерпретаторов Windows"),
+        (@"\\27Lua|\x1bLua", "Скрытый прекомпилированный байткод Lua"),
+        (@"(?:loadstring|(?<![a-zA-Z0-9_\.])load)\s*\([^)]*string\.char", "Динамическое выполнение обфусцированного массива string.char (...)")
     };
 
-    // УРОВЕНЬ 2 (ПРЕДУПРЕЖДЕНИЕ): Динамические конструкции, которые встречаются и в сложных легальных модах, и при обфускации
+    // УРОВЕНЬ 2 (ПРЕДУПРЕЖДЕНИЕ)
     private static readonly (string Pattern, string Description)[] HeuristicLuaWarningSignatures =
     {
-        (@"socket\.http|http\.request|luasec", "Сетевое обращение из Lua (проверьте, нужен ли моду интернет)"),
+        (@"socket\.http|http\.request|luasec", "Сетевое обращение из Lua"),
         (@"ffi\.C\.", "Обращение к структурам C (ffi.C)"),
         (@"loadstring\s*\(|(?<![a-zA-Z0-9_\.])load\s*\(", "Динамическая компиляция строк (load / loadstring)"),
-        (@"_G\s*\[|rawget\s*\(\s*_G", "Динамическое обращение к глобальной таблице _G[...]"),
+        (@"_G\s*\.|_G\s*\[|rawget\s*\(\s*_G", "Динамическое обращение к глобальной таблице _G"),
         (@"setfenv\s*\(|getfenv\s*\(", "Изменение окружения функций (setfenv / getfenv)"),
-        (@"string\.char\s*\((?:\s*\d+\s*,){8,}", "Длинная цепочка string.char(...) (возможна обфускация)"),
-        (@"(?:\\[0-9]{2,3}){12,}|(?:\\x[0-9a-fA-F]{2}){12,}", "Длинная экранированная байтовая/hex строка в Lua")
+        (@"string\.char\s*\((?:\s*\d+\s*,){5,}", "Цепочка string.char(...)"),
+        (@"os\s*\.\s*(?:remove|rename)\b", "Удаление или переименование файлов (os.remove / os.rename)")
     };
 
     private static readonly (string Pattern, string Description)[] CriticalJsSignatures =
@@ -226,7 +229,6 @@ public class SecurityScannerService
                 continue;
             }
 
-            // Потоковая проверка вложенных архивов через временный файл на диске с FileOptions.DeleteOnClose (0 МБ нагрузки на RAM!)
             if (ext is ".zip" or ".rar" or ".7z")
             {
                 if (entry.Size <= 0) continue;
@@ -263,7 +265,6 @@ public class SecurityScannerService
                 continue;
             }
 
-            // Двухуровневая проверка .lua скриптов с предварительной очисткой комментариев
             if (ext == ".lua" && entry.Size > 0)
             {
                 report.LuaFilesScanned++;
@@ -277,11 +278,15 @@ public class SecurityScannerService
                     using var stream = entry.OpenEntryStream();
                     using var reader = new StreamReader(stream);
                     string rawLua = reader.ReadToEnd();
-                    string cleanLua = StripLuaComments(rawLua);
+
+                    // 1. Посимвольный лексер Lua (удаляет комментарии ТОЛЬКО вне строковых литералов)
+                    string UncommentedLua = StripLuaCommentsWithLexer(rawLua);
+                    // 2. Деобфускация эскейпов (\111\115 -> os), склейка конкатенаций ("exe".."cute" -> "execute") и скобок (os["execute"] -> os.execute)
+                    string normalizedLua = NormalizeAndDeobfuscateLua(UncommentedLua);
 
                     foreach (var (pattern, desc) in CriticalLuaExploitSignatures)
                     {
-                        if (Regex.IsMatch(cleanLua, pattern, RegexOptions.IgnoreCase))
+                        if (Regex.IsMatch(normalizedLua, pattern, RegexOptions.IgnoreCase))
                         {
                             report.CriticalLuaExploitsFound.Add($"{Path.GetFileName(entryName)}: {desc}");
                         }
@@ -289,7 +294,7 @@ public class SecurityScannerService
 
                     foreach (var (pattern, desc) in HeuristicLuaWarningSignatures)
                     {
-                        if (Regex.IsMatch(cleanLua, pattern, RegexOptions.IgnoreCase))
+                        if (Regex.IsMatch(normalizedLua, pattern, RegexOptions.IgnoreCase))
                         {
                             report.HeuristicWarnings.Add($"{Path.GetFileName(entryName)}: {desc}");
                         }
@@ -316,11 +321,154 @@ public class SecurityScannerService
         }
     }
 
-    private static string StripLuaComments(string luaCode)
+    /// <summary>
+    /// Настоящий посимвольный лексер Lua (конечный автомат):
+    /// распознаёт одинарные '...', двойные "..." и многострочные [=[...]=] строки,
+    /// поэтому символы "--" или "--[[" внутри строк НИКОГДА не обрезают следующий за ними код!
+    /// </summary>
+    public static string StripLuaCommentsWithLexer(string code)
     {
-        // Удаляем блочные комментарии --[[ ... ]] и однострочные комментарии --...
-        string noBlock = Regex.Replace(luaCode, @"--\[\[[\s\S]*?\]\]", "", RegexOptions.Multiline);
-        return Regex.Replace(noBlock, @"--[^\r\n]*", "");
+        var sb = new StringBuilder(code.Length);
+        int i = 0;
+        int len = code.Length;
+
+        while (i < len)
+        {
+            char c = code[i];
+
+            // 1. Одинарная или двойная строка ('...' или "...")
+            if (c == '"' || c == '\'')
+            {
+                char quote = c;
+                sb.Append(c);
+                i++;
+                while (i < len)
+                {
+                    char sc = code[i];
+                    sb.Append(sc);
+                    i++;
+                    if (sc == '\\' && i < len)
+                    {
+                        sb.Append(code[i]);
+                        i++;
+                    }
+                    else if (sc == quote)
+                    {
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            // 2. Проверка на многострочный литерал [=[ ... ]=]
+            if (c == '[')
+            {
+                int eqCount = MatchLongBracketOpening(code, i);
+                if (eqCount >= 0)
+                {
+                    int openLen = eqCount + 2;
+                    sb.Append(code, i, openLen);
+                    i += openLen;
+                    int closePos = FindLongBracketClosing(code, i, eqCount);
+                    if (closePos >= 0)
+                    {
+                        int closeLen = eqCount + 2;
+                        sb.Append(code, i, closePos + closeLen - i);
+                        i = closePos + closeLen;
+                    }
+                    else
+                    {
+                        sb.Append(code, i, len - i);
+                        break;
+                    }
+                    continue;
+                }
+            }
+
+            // 3. Проверка на комментарий (-- или --[=[ ... ]=])
+            if (c == '-' && i + 1 < len && code[i + 1] == '-')
+            {
+                i += 2;
+                if (i < len && code[i] == '[')
+                {
+                    int eqCount = MatchLongBracketOpening(code, i);
+                    if (eqCount >= 0)
+                    {
+                        i += eqCount + 2;
+                        int closePos = FindLongBracketClosing(code, i, eqCount);
+                        if (closePos >= 0)
+                        {
+                            i = closePos + eqCount + 2;
+                            sb.Append(' ');
+                            continue;
+                        }
+                        break;
+                    }
+                }
+
+                // Однострочный комментарий до конца строки
+                while (i < len && code[i] != '\n' && code[i] != '\r')
+                    i++;
+
+                continue;
+            }
+
+            sb.Append(c);
+            i++;
+        }
+
+        return sb.ToString();
+    }
+
+    private static int MatchLongBracketOpening(string s, int pos)
+    {
+        if (pos >= s.Length || s[pos] != '[') return -1;
+        int p = pos + 1;
+        int eq = 0;
+        while (p < s.Length && s[p] == '=') { eq++; p++; }
+        return (p < s.Length && s[p] == '[') ? eq : -1;
+    }
+
+    private static int FindLongBracketClosing(string s, int startPos, int eqCount)
+    {
+        string target = "]" + new string('=', eqCount) + "]";
+        return s.IndexOf(target, startPos, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Деобфускатор выражений Lua:
+    /// 1. Декодирует \xXX и \ddd эскейпы внутри строковых литералов ("\111\115" -> "os").
+    /// 2. Склеивает конкатенации строковых литералов ("exe" .. "cute" -> "execute").
+    /// 3. Преобразует скобочный доступ к таблицам (os["execute"] или _G["os"]["execute"]) в точечный (_G.os.execute).
+    /// </summary>
+    public static string NormalizeAndDeobfuscateLua(string code)
+    {
+        // 1. Декодируем \xXX (hex) и \ddd (десятичные) эскейпы
+        string decoded = Regex.Replace(code, @"\\x([0-9a-fA-F]{2})", m =>
+        {
+            int val = int.Parse(m.Groups[1].Value, NumberStyles.HexNumber);
+            return val is >= 32 and <= 126 ? ((char)val).ToString() : m.Value;
+        });
+
+        decoded = Regex.Replace(decoded, @"\\([0-9]{1,3})", m =>
+        {
+            if (int.TryParse(m.Groups[1].Value, out int val) && val is >= 32 and <= 126)
+                return ((char)val).ToString();
+            return m.Value;
+        });
+
+        // 2. Склеиваем конкатенации соседних строковых литералов ("exe" .. "cute" -> "execute")
+        for (int pass = 0; pass < 4; pass++)
+        {
+            string next = Regex.Replace(decoded, @"""([^""\\]*)""\s*\.\.\s*""([^""\\]*)""", "\"$1$2\"");
+            next = Regex.Replace(next, @"'([^'\\]*)'\s*\.\.\s*'([^'\\]*)'", "'$1$2'");
+            if (next == decoded) break;
+            decoded = next;
+        }
+
+        // 3. Нормализуем обращения вида tbl["method"] или tbl['method'] -> tbl.method
+        string normalized = Regex.Replace(decoded, @"\[\s*[""']([a-zA-Z_][a-zA-Z0-9_]*)[""']\s*\]", ".$1");
+        return normalized;
     }
 
     private static void RunWindowsDefenderScan(string filePath, SecurityScanReport report)

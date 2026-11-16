@@ -14,7 +14,7 @@ public partial class ModHubWindow : Window
     private readonly SecurityScannerService _securityScanner = new();
     private readonly string _targetModsDir;
     private readonly Func<Task> _onModInstalledCallback;
-    private bool _isInsideTrustedPortalSession = true;
+    private bool _isInsideTrustedPortalSession = false;
 
     // 1. Четыре разрешённых портала модов
     private static readonly string[] AllowedBrowsingPortals =
@@ -58,8 +58,7 @@ public partial class ModHubWindow : Window
             Browser.CoreWebView2.SourceChanged += (_, _) =>
             {
                 TxtUrl.Text = Browser.Source?.ToString() ?? "";
-                if (Browser.Source != null && IsPortalDomain(Browser.Source.Host))
-                    _isInsideTrustedPortalSession = true;
+                _isInsideTrustedPortalSession = Browser.Source != null && IsPortalDomain(Browser.Source.Host);
             };
 
             Browser.CoreWebView2.DownloadStarting += CoreWebView2_DownloadStarting;
@@ -84,7 +83,7 @@ public partial class ModHubWindow : Window
             if (_isInsideTrustedPortalSession && IsMirrorDomain(uri.Host))
                 return;
 
-            e.Cancel = true;
+            _isInsideTrustedPortalSession = false; e.Cancel = true;
             LblHubStatus.Text = $"🛡️ Заблокирован переход на неразрешённый домен: {uri.Host}";
         }
     }
@@ -110,7 +109,7 @@ public partial class ModHubWindow : Window
 
         if (ext is not (".zip" or ".rar" or ".7z"))
         {
-            e.Cancel = true;
+            _isInsideTrustedPortalSession = false; e.Cancel = true;
             LblHubStatus.Text = $"🛡️ Заблокировано скачивание не-архивного файла: {originalFileName}";
             return;
         }
@@ -380,3 +379,4 @@ public partial class ModHubWindow : Window
         }
     }
 }
+
