@@ -6,13 +6,12 @@
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
-		<Version>1.4.0</Version>
+		<Version>2.0.0</Version>
 		<AssemblyName>BeamNGModManager</AssemblyName>
 
-		<!-- РРєРѕРЅРєР° СЃР°РјРѕРіРѕ .exe С„Р°Р№Р»Р° РІ РџСЂРѕРІРѕРґРЅРёРєРµ Рё РЅР° Р Р°Р±РѕС‡РµРј СЃС‚РѕР»Рµ -->
 		<ApplicationIcon>icon.ico</ApplicationIcon>
+		<NoWarn>NU1902</NoWarn>
 
-		<!-- РџР°СЂР°РјРµС‚СЂС‹ СЃР±РѕСЂРєРё РІ РѕРґРёРЅ РїРѕСЂС‚Р°С‚РёРІРЅС‹Р№ .exe С„Р°Р№Р» -->
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<SelfContained>true</SelfContained>
 		<PublishSingleFile>true</PublishSingleFile>
@@ -23,11 +22,12 @@
 
 	<ItemGroup>
 		<PackageReference Include="SharpCompress" Version="0.38.0" />
+		<!-- Движок для встроенного Мод-Хаба (BeamNG.com, ModLand, PlayGround, Nexus) -->
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<EmbeddedResource Include="locales.json" />
-		<!-- Р’С€РёРІР°РµРј РёРєРѕРЅРєСѓ РІ СЂРµСЃСѓСЂСЃС‹ РѕРєРЅР° WPF -->
 		<Resource Include="icon.ico" />
 	</ItemGroup>
 

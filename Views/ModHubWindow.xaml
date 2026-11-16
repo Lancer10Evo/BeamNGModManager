@@ -1,0 +1,100 @@
+<Window x:Class="BeamNGModManager.Views.ModHubWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="🌐 Мод-Хаб 2.0 — Загрузчик модов (BeamNG.com • ModLand • PlayGround • Nexus)"
+        Height="820" Width="1280"
+        Icon="pack://application:,,,/icon.ico"
+        Background="{StaticResource BgDark}" Foreground="{StaticResource TextPrimary}"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- РЯД 0: Кнопки переключения между 4 порталами модов -->
+        <Border Grid.Row="0" Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}"
+                BorderThickness="1" CornerRadius="10" Padding="12,8" Margin="0,0,0,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0" Content="🟠 BeamNG.com (Офиц. Репозиторий)"
+                        Style="{StaticResource PrimaryOrangeButton}" Margin="0,0,8,0"
+                        Click="BtnPortalBeamNg_Click"/>
+
+                <Button Grid.Column="1" Content="🔵 ModLand.net"
+                        Style="{StaticResource ModernButton}" Background="#1E293B" BorderBrush="#3B82F6" Foreground="#60A5FA"
+                        Margin="0,0,8,0" Click="BtnPortalModLand_Click"/>
+
+                <Button Grid.Column="2" Content="🔴 PlayGround.ru"
+                        Style="{StaticResource ModernButton}" Background="#2D1B1E" BorderBrush="#EF4444" Foreground="#F87171"
+                        Margin="0,0,8,0" Click="BtnPortalPlayGround_Click"/>
+
+                <Button Grid.Column="3" Content="🟡 Nexus Mods"
+                        Style="{StaticResource ModernButton}" Background="#2B2314" BorderBrush="#F59E0B" Foreground="#FBBF24"
+                        Margin="0,0,8,0" Click="BtnPortalNexus_Click"/>
+
+                <TextBlock Grid.Column="5" Text="⚡ Любой скачанный мод (.zip/.rar/.7z) перехватывается и устанавливается автоматически!"
+                           Foreground="#10B981" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- РЯД 1: Навигация и Прямая загрузка по ссылке -->
+        <Grid Grid.Row="1" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0" Content="◀" Style="{StaticResource ModernButton}" Width="40" Margin="0,0,6,0" Click="BtnBack_Click"/>
+            <Button Grid.Column="1" Content="▶" Style="{StaticResource ModernButton}" Width="40" Margin="0,0,6,0" Click="BtnForward_Click"/>
+            <Button Grid.Column="2" Content="🔄" Style="{StaticResource ModernButton}" Width="42" Margin="0,0,10,0" Click="BtnReload_Click"/>
+
+            <TextBox x:Name="TxtUrl" Grid.Column="3" Background="{StaticResource BgCard}" Foreground="White"
+                     BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" Padding="10,0" Height="36"
+                     VerticalContentAlignment="Center" Margin="0,0,10,0" KeyDown="TxtUrl_KeyDown"/>
+
+            <Button Grid.Column="4" Content="⬇️ Скачать по прямой ссылке"
+                    Style="{StaticResource LaunchGreenButton}" Padding="16,8" Click="BtnDirectDownload_Click"/>
+        </Grid>
+
+        <!-- РЯД 2: Встроенный браузер порталов модов -->
+        <Border Grid.Row="2" Background="#141418" BorderBrush="{StaticResource BorderSubtle}"
+                BorderThickness="1" CornerRadius="10" ClipToBounds="True">
+            <wv2:WebView2 x:Name="Browser" Source="https://www.beamng.com/resources/"/>
+        </Border>
+
+        <!-- РЯД 3: Нижняя панель статуса и живого прогресс-бара скачивания + автоустановки -->
+        <Border Grid.Row="3" Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}"
+                BorderThickness="1" CornerRadius="10" Padding="14,10" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="1.5*"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="LblHubStatus" Grid.Column="0"
+                           Text="Выберите мод на сайте и нажмите «Download / Скачать» — программа сама скачает, очистит от рекламы и установит его в игру!"
+                           Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" Margin="0,0,16,0"/>
+
+                <ProgressBar x:Name="PbDownload" Grid.Column="1" Height="18" Minimum="0" Maximum="100" Value="0"
+                             Background="#15151A" Foreground="{StaticResource AccentOrange}" BorderBrush="#32323E"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

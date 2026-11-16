@@ -65,7 +65,6 @@ public partial class MainWindow : Window
         LblProfile.Text = _loc.Get("profile");
         BtnAddProfile.Content = _loc.Get("add_profile");
         BtnAutoDetect.Content = _loc.Get("auto_detect");
-        BtnInstallMods.Content = $"＋ {_loc.Get("install_mods")}";
         LblStatus.Text = _loc.Get("drag_drop_hint");
         FilterAll.Content = _loc.Get("filter_all");
         FilterActive.Content = _loc.Get("filter_active");
@@ -198,7 +197,7 @@ public partial class MainWindow : Window
         }
     }
 
-    // --- Установка модов ---
+    // --- Установка модов и Мод-Хаб 2.0 ---
     private async void BtnInstallMods_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new OpenFileDialog
@@ -209,6 +208,16 @@ public partial class MainWindow : Window
 
         if (dlg.ShowDialog() == true)
             await RunSmartInstallAsync(dlg.FileNames);
+    }
+
+    private void BtnOpenModHub_Click(object sender, RoutedEventArgs e)
+    {
+        if (ActiveProfile == null) return;
+        var hubWindow = new ModHubWindow(_installer, ActiveProfile.ModsPath, ReloadModsListAsync)
+        {
+            Owner = this
+        };
+        hubWindow.Show();
     }
 
     private void Window_DragOver(object sender, DragEventArgs e)
