@@ -14,8 +14,9 @@ public partial class ModHubWindow : Window
     private readonly SecurityScannerService _securityScanner = new();
     private readonly string _targetModsDir;
     private readonly Func<Task> _onModInstalledCallback;
+    private bool _isInsideTrustedPortalSession = true;
 
-    // 1. Основные порталы модов
+    // 1. Четыре разрешённых портала модов
     private static readonly string[] AllowedBrowsingPortals =
     {
         "beamng.com",
@@ -25,26 +26,12 @@ public partial class ModHubWindow : Window
         "nexus-cdn.com"
     };
 
-    // 2. Облачные хранилища и файловые CDN (включая Cloudflare R2, S3, зеркала PlayGround и ModLand)
-    private static readonly string[] AllowedDownloadCdns =
+    // 2. Узкий список только тех технических файловых CDN, которые реально используются этими 4 порталами
+    private static readonly string[] AllowedPortalMirrors =
     {
-        "cloudflarestorage.com",
-        "cloudflare.com",
+        "r2.cloudflarestorage.com",
         "modsfire.com",
-        "sharemods.com",
-        "modsbase.com",
-        "modsup.com",
-        "amazonaws.com",
-        "b-cdn.net",
-        "digitaloceanspaces.com",
-        "mediafire.com",
-        "drive.google.com",
-        "googleusercontent.com",
-        "workupload.com",
-        "mega.nz",
-        "yandex.net",
-        "yandex.ru",
-        "mail.ru"
+        "sharemods.com"
     };
 
     public ModHubWindow(SmartInstallerService installer, string targetModsDir, Func<Task> onModInstalledCallback)
@@ -71,6 +58,8 @@ public partial class ModHubWindow : Window
             Browser.CoreWebView2.SourceChanged += (_, _) =>
             {
                 TxtUrl.Text = Browser.Source?.ToString() ?? "";
+                if (Browser.Source != null && IsPortalDomain(Browser.Source.Host))
+                    _isInsideTrustedPortalSession = true;
             };
 
             Browser.CoreWebView2.DownloadStarting += CoreWebView2_DownloadStarting;
@@ -85,11 +74,18 @@ public partial class ModHubWindow : Window
     {
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri))
         {
-            if (!IsUriAllowed(uri))
+            if (IsPortalDomain(uri.Host))
             {
-                e.Cancel = true;
-                LblHubStatus.Text = $"🛡️ Заблокирован переход на неразрешённый домен: {uri.Host}";
+                _isInsideTrustedPortalSession = true;
+                return;
             }
+
+            // Переход на файловое зеркало (r2.cloudflarestorage.com / modsfire / sharemods) разрешён ТОЛЬКО изнутри открытого портала модов
+            if (_isInsideTrustedPortalSession && IsMirrorDomain(uri.Host))
+                return;
+
+            e.Cancel = true;
+            LblHubStatus.Text = $"🛡️ Заблокирован переход на неразрешённый домен: {uri.Host}";
         }
     }
 
@@ -100,27 +96,11 @@ public partial class ModHubWindow : Window
             host.EndsWith("." + d, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool IsCdnDomain(string host)
+    private static bool IsMirrorDomain(string host)
     {
-        return AllowedDownloadCdns.Any(d =>
+        return AllowedPortalMirrors.Any(d =>
             host.Equals(d, StringComparison.OrdinalIgnoreCase) ||
             host.EndsWith("." + d, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static bool IsUriAllowed(Uri uri)
-    {
-        if (IsPortalDomain(uri.Host) || IsCdnDomain(uri.Host))
-            return true;
-
-        // Пропускаем прямые облачные редиректы на скачивание архивов (.zip/.rar/.7z и S3/Cloudflare R2 подписи)
-        string pq = uri.PathAndQuery.ToLowerInvariant();
-        if (pq.Contains(".zip") || pq.Contains(".rar") || pq.Contains(".7z") ||
-            pq.Contains("x-amz-") || pq.Contains("content-disposition"))
-        {
-            return true;
-        }
-
-        return false;
     }
 
     private void CoreWebView2_DownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
@@ -200,12 +180,30 @@ public partial class ModHubWindow : Window
         try
         {
             PbDownload.IsIndeterminate = true;
-            LblHubStatus.Text = $"🛡️ Антивирусное сканирование и рекурсивный аудит Lua: {displayFileName}...";
+            LblHubStatus.Text = $"🛡️ Антивирусное сканирование и аудит Lua: {displayFileName}...";
 
             var scanReport = await _securityScanner.ScanArchiveAsync(quarantineFilePath, sourceHost);
 
             PbDownload.IsIndeterminate = false;
             PbDownload.Value = 100;
+
+            // ЖЁСТКАЯ БЛОКИРОВКА: Если найдена угроза (DangerousThreat), установить мод НЕЛЬЗЯ!
+            if (scanReport.Verdict == ScanVerdict.DangerousThreat)
+            {
+                string blockedText = scanReport.BuildFormattedSummary() +
+                                     "\n\n⛔ Установка этого архива заблокирована системой безопасности!\n" +
+                                     "Файл будет немедленно удалён из карантина.\n\n" +
+                                     "Открыть страницу этого хеша на VirusTotal?";
+
+                if (MessageBox.Show(blockedText, "⛔ УСТАНОВКА ЗАБЛОКИРОВАНА",
+                    MessageBoxButton.YesNo, MessageBoxImage.Error) == MessageBoxResult.Yes)
+                {
+                    Process.Start(new ProcessStartInfo(scanReport.VirusTotalUrl) { UseShellExecute = true });
+                }
+
+                LblHubStatus.Text = $"⛔ Опасный файл {displayFileName} заблокирован и удалён из карантина.";
+                return;
+            }
 
             string dialogText = scanReport.BuildFormattedSummary() +
                                 "\n\nНажмите:\n" +
@@ -213,12 +211,9 @@ public partial class ModHubWindow : Window
                                 "• «Нет» — Открыть страницу хеша этого файла на VirusTotal\n" +
                                 "• «Отмена» — Удалить скачанный архив из карантина";
 
-            string dialogTitle = scanReport.Verdict switch
-            {
-                ScanVerdict.VerifiedSafe => "✅ Подтверждение установки (Проверено)",
-                ScanVerdict.UnverifiedWarning => "⚠️ ВНИМАНИЕ: Статус не подтверждён антивирусом",
-                _ => "🚨 КРИТИЧЕСКАЯ УГРОЗА БЕЗОПАСНОСТИ"
-            };
+            string dialogTitle = scanReport.Verdict == ScanVerdict.VerifiedSafe
+                ? "✅ Подтверждение установки (Проверено)"
+                : "⚠️ ВНИМАНИЕ: Требуется подтверждение пользователя";
 
             MessageBoxImage dialogIcon = scanReport.Verdict == ScanVerdict.VerifiedSafe
                 ? MessageBoxImage.Information
@@ -320,9 +315,10 @@ public partial class ModHubWindow : Window
             return;
         }
 
-        if (!IsUriAllowed(uri))
+        // Для прямой загрузки по URL из адресной строки разрешены ТОЛЬКО 4 официальных портала
+        if (!IsPortalDomain(uri.Host))
         {
-            MessageBox.Show($"Домен «{uri.Host}» не входит в белый список разрешённых порталов.",
+            MessageBox.Show($"Прямая загрузка по ссылке разрешена только с 4 официальных порталов модов (домен «{uri.Host}» отклонён).",
                 Title, MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -330,8 +326,7 @@ public partial class ModHubWindow : Window
         string ext = Path.GetExtension(uri.AbsolutePath).ToLowerInvariant();
         if (ext is not (".zip" or ".rar" or ".7z"))
         {
-            if (IsPortalDomain(uri.Host))
-                NavigateTo(url);
+            NavigateTo(url);
             return;
         }
 
@@ -353,7 +348,7 @@ public partial class ModHubWindow : Window
             response.EnsureSuccessStatusCode();
 
             Uri finalUri = response.RequestMessage?.RequestUri ?? uri;
-            if (!IsUriAllowed(finalUri))
+            if (!IsPortalDomain(finalUri.Host) && !IsMirrorDomain(finalUri.Host))
             {
                 LblHubStatus.Text = $"🛡️ Заблокирован редирект на неразрешённый хост: {finalUri.Host}";
                 return;

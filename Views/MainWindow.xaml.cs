@@ -260,6 +260,15 @@ public partial class MainWindow : Window
             LblStatus.Text = $"🛡️ Проверка антивирусом и рекурсивный аудит Lua: {name}...";
 
             var report = await _securityScanner.ScanArchiveAsync(filePath, null);
+            if (report.Verdict == ScanVerdict.DangerousThreat)
+            {
+                if (MessageBox.Show(report.BuildFormattedSummary() + "\n\n⛔ Установка этого архива заблокирована!\nОткрыть отчёт хеша на VirusTotal?",
+                    "⛔ УСТАНОВКА ЗАБЛОКИРОВАНА", MessageBoxButton.YesNo, MessageBoxImage.Error) == MessageBoxResult.Yes)
+                {
+                    Process.Start(new ProcessStartInfo(report.VirusTotalUrl) { UseShellExecute = true });
+                }
+                continue;
+            }
             string dialogText = report.BuildFormattedSummary() +
                                 "\n\nНажмите:\n" +
                                 "• «Да» — Установить этот мод\n" +

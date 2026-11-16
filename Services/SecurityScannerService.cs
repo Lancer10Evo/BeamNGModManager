@@ -9,9 +9,9 @@ namespace BeamNGModManager.Services;
 
 public enum ScanVerdict
 {
-    VerifiedSafe,      // Все проверки (включая Defender ExitCode == 0) прошли успешно
-    UnverifiedWarning, // Угроз в Lua/файлах не найдено, но Defender не смог подтвердить (таймаут / нет Defender) или есть подозрения
-    DangerousThreat    // Найдены исполняемые файлы, опасный/обфусцированный Lua-код или вирус по базе Defender
+    VerifiedSafe,      // Все проверки (включая Defender ExitCode == 0) чистые
+    UnverifiedWarning, // Критических угроз нет, но есть эвристические предупреждения или таймаут Defender
+    DangerousThreat    // Найдены бинарники (.exe/.dll/.bat), вирус Defender или прямой эксплойт в Lua -> УСТАНОВКА БЛОКИРУЕТСЯ
 }
 
 public class SecurityScanReport
@@ -30,17 +30,17 @@ public class SecurityScanReport
     public int UiJsFilesCount { get; set; }
 
     public List<string> DangerousBinariesFound { get; set; } = new();
-    public List<string> SuspiciousLuaPatternsFound { get; set; } = new();
-    public List<string> Warnings { get; set; } = new();
+    public List<string> CriticalLuaExploitsFound { get; set; } = new();
+    public List<string> HeuristicWarnings { get; set; } = new();
 
     public ScanVerdict Verdict
     {
         get
         {
-            if (DefenderDetectedThreat || DangerousBinariesFound.Count > 0 || SuspiciousLuaPatternsFound.Count > 0)
+            if (DefenderDetectedThreat || DangerousBinariesFound.Count > 0 || CriticalLuaExploitsFound.Count > 0)
                 return ScanVerdict.DangerousThreat;
 
-            if (!DefenderConfirmedClean || Warnings.Count > 0)
+            if (!DefenderConfirmedClean || HeuristicWarnings.Count > 0)
                 return ScanVerdict.UnverifiedWarning;
 
             return ScanVerdict.VerifiedSafe;
@@ -53,7 +53,7 @@ public class SecurityScanReport
     {
         double mb = FileSizeBytes / 1024.0 / 1024.0;
         var sb = new StringBuilder();
-        sb.AppendLine($"🛡️ ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.2)");
+        sb.AppendLine($"🛡️ ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.3)");
         sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         sb.AppendLine($"📄 Файл: {FileName} ({mb:F2} MB)");
         sb.AppendLine($"🌐 Источник: {SourceOrigin}");
@@ -68,33 +68,33 @@ public class SecurityScanReport
         sb.AppendLine($"2. Проверка на исполняемые файлы (.exe/.dll/.bat/.ps1/.scr):");
         sb.AppendLine(DangerousBinariesFound.Count == 0
             ? "   ✅ Чисто (включая проверку вложенных архивов)"
-            : $"   ❌ ОПАСНО! Найдены бинарные файлы: {string.Join(", ", DangerousBinariesFound.Take(5))}");
+            : $"   ❌ БЛОКИРОВКА! Найдены исполняемые файлы: {string.Join(", ", DangerousBinariesFound.Take(5))}");
         sb.AppendLine();
 
-        sb.AppendLine($"3. Глубокий аудит Lua и UI-скриптов (Lua: {LuaFilesScanned}, Влож. архивов: {NestedArchivesScanned}, UI .js: {UiJsFilesCount}):");
-        if (SuspiciousLuaPatternsFound.Count == 0)
-            sb.AppendLine("   ✅ Опасных вызовов или обфускации в Lua не обнаружено");
+        sb.AppendLine($"3. Аудит скриптов (Lua: {LuaFilesScanned}, Влож. архивов: {NestedArchivesScanned}, UI .js: {UiJsFilesCount}):");
+        if (CriticalLuaExploitsFound.Count == 0)
+            sb.AppendLine("   ✅ Критических эксплойтов (os.execute / io.popen / ffi.load) не найдено");
         else
-            sb.AppendLine($"   🚨 ОПАСНЫЙ ИЛИ ОБФУСЦИРОВАННЫЙ КОД:\n   • {string.Join("\n   • ", SuspiciousLuaPatternsFound.Take(6))}");
+            sb.AppendLine($"   🚨 БЛОКИРОВКА! ОПАСНЫЙ КОД В LUA:\n   • {string.Join("\n   • ", CriticalLuaExploitsFound.Take(5))}");
 
-        if (Warnings.Count > 0)
+        if (HeuristicWarnings.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"4. Предупреждения инспектора:");
-            sb.AppendLine($"   • {string.Join("\n   • ", Warnings.Take(4))}");
+            sb.AppendLine($"4. Эвристические замечания (не блокируют установку):");
+            sb.AppendLine($"   ⚠️ {string.Join("\n   ⚠️ ", HeuristicWarnings.Take(5))}");
         }
 
         sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         switch (Verdict)
         {
             case ScanVerdict.VerifiedSafe:
-                sb.AppendLine("✅ ВЕРДИКТ: Проверено Defender и статическим анализатором. Угроз не найдено.");
+                sb.AppendLine("✅ ВЕРДИКТ: Проверено Defender и анализатором кода. Угроз не найдено.");
                 break;
             case ScanVerdict.UnverifiedWarning:
-                sb.AppendLine("⚠️ ВЕРДИКТ: Статический анализ пройден, но полная антивирусная проверка НЕ подтверждена или источник немодерируемый. Рекомендуется проверить хеш на VirusTotal (кнопка «Нет»).");
+                sb.AppendLine("⚠️ ВЕРДИКТ: Прямых угроз нет, но есть эвристические замечания или антивирус не подтвердил статус. Рекомендуется сверить хеш на VirusTotal.");
                 break;
             case ScanVerdict.DangerousThreat:
-                sb.AppendLine("🚨 ВЕРДИКТ: ОБНАРУЖЕНА УГРОЗА БЕЗОПАСНОСТИ! Не устанавливайте этот архив!");
+                sb.AppendLine("⛔ ВЕРДИКТ: УСТАНОВКА ЗАБЛОКИРОВАНА! В архиве обнаружено вредоносное содержимое.");
                 break;
         }
 
@@ -105,35 +105,41 @@ public class SecurityScanReport
 public class SecurityScannerService
 {
     private const int MaxNestedScanDepth = 3;
+    private const long MaxSingleNestedArchiveBytes = 256L * 1024 * 1024; // 256 MB лимит на вложенный архив
+    private const long MaxTotalNestedQuotaBytes = 512L * 1024 * 1024;    // 512 MB общий бюджет на диск (0 МБ в RAM)
 
-    // Убрано .js (легально используется в UI BeamNG), оставлены только реальные исполняемые форматы ОС
     private static readonly HashSet<string> ForbiddenBinaryExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".exe", ".dll", ".bat", ".cmd", ".ps1", ".vbs", ".vbe", ".jse", ".wsf", ".scr", ".msi", ".com", ".hta", ".pif", ".cpl"
     };
 
-    // Прямые опасные вызовы + сигнатуры обфускации и динамического выполнения в Lua
-    private static readonly (string Pattern, string Description)[] DangerousLuaSignatures =
+    // УРОВЕНЬ 1 (БЛОКИРУЮЩИЙ): Прямые эксплойты, выполнение команд ОС, загрузка DLL и скрытый байткод
+    private static readonly (string Pattern, string Description)[] CriticalLuaExploitSignatures =
     {
         (@"os\.execute\s*\(", "os.execute() — прямой запуск системных команд ОС"),
-        (@"io\.popen\s*\(", "io.popen() — скрытый запуск процессов"),
-        (@"package\.loadlib\s*\(", "package.loadlib() — загрузка внешней DLL"),
+        (@"io\.popen\s*\(", "io.popen() — скрытый запуск процессов ОС"),
+        (@"package\.loadlib\s*\(", "package.loadlib() — подгрузка внешней DLL"),
         (@"ffi\.load\s*\(", "ffi.load() — загрузка нативной DLL через LuaJIT FFI"),
-        (@"ffi\.C\.", "ffi.C — прямой вызов функций Win32 API"),
-        (@"powershell|cmd\.exe|wscript|cscript|mshta|curl\.exe|certutil", "Попытка вызова системных утилит Windows"),
-        (@"socket\.http|http\.request|luasec", "Сетевой запрос из Lua к внешнему серверу"),
-        (@"loadstring\s*\(|(?<![a-zA-Z0-9_])load\s*\(", "Динамическая компиляция скрытого кода (load / loadstring)"),
-        (@"_G\s*\[|rawget\s*\(\s*_G", "Динамический обход глобальной таблицы _G[...] (признак обфускации)"),
-        (@"setfenv\s*\(|getfenv\s*\(", "Манипуляция окружением функций (setfenv / getfenv)"),
-        (@"string\.char\s*\((?:\s*\d+\s*,){5,}", "Сборка скрытых строк через string.char(...) (обфускация)"),
-        (@"(?:\\[0-9]{2,3}){8,}|(?:\\x[0-9a-fA-F]{2}){8,}", "Обфусцированная байтовая/hex строка в коде Lua"),
+        (@"powershell(?:\.exe)?|cmd\.exe|wscript(?:\.exe)?|cscript(?:\.exe)?|mshta(?:\.exe)?|certutil", "Вызов системных утилит Windows из Lua"),
         (@"\\27Lua|\x1bLua", "Скрытый прекомпилированный байткод Lua")
     };
 
-    private static readonly (string Pattern, string Description)[] DangerousJsSignatures =
+    // УРОВЕНЬ 2 (ПРЕДУПРЕЖДЕНИЕ): Динамические конструкции, которые встречаются и в сложных легальных модах, и при обфускации
+    private static readonly (string Pattern, string Description)[] HeuristicLuaWarningSignatures =
     {
-        (@"ActiveXObject|WScript\.Shell", "Попытка вызова системного COM/ActiveX из JS"),
-        (@"child_process|require\s*\(\s*['""]fs['""]", "Попытка доступа к файловой системе / процессам из JS")
+        (@"socket\.http|http\.request|luasec", "Сетевое обращение из Lua (проверьте, нужен ли моду интернет)"),
+        (@"ffi\.C\.", "Обращение к структурам C (ffi.C)"),
+        (@"loadstring\s*\(|(?<![a-zA-Z0-9_\.])load\s*\(", "Динамическая компиляция строк (load / loadstring)"),
+        (@"_G\s*\[|rawget\s*\(\s*_G", "Динамическое обращение к глобальной таблице _G[...]"),
+        (@"setfenv\s*\(|getfenv\s*\(", "Изменение окружения функций (setfenv / getfenv)"),
+        (@"string\.char\s*\((?:\s*\d+\s*,){8,}", "Длинная цепочка string.char(...) (возможна обфускация)"),
+        (@"(?:\\[0-9]{2,3}){12,}|(?:\\x[0-9a-fA-F]{2}){12,}", "Длинная экранированная байтовая/hex строка в Lua")
+    };
+
+    private static readonly (string Pattern, string Description)[] CriticalJsSignatures =
+    {
+        (@"ActiveXObject|WScript\.Shell", "Вызов системного COM/ActiveX из UI-скрипта"),
+        (@"child_process", "Попытка запуска дочернего процесса из JS")
     };
 
     public async Task<SecurityScanReport> ScanArchiveAsync(string archivePath, string? sourceDomain = null)
@@ -150,20 +156,19 @@ public class SecurityScannerService
             };
 
             if (!string.IsNullOrEmpty(sourceWarning))
-                report.Warnings.Add(sourceWarning);
+                report.HeuristicWarnings.Add(sourceWarning);
 
-            // 1. Честная проверка через антивирус Microsoft Defender (без тихого падения и без ложного "passed = true")
             RunWindowsDefenderScan(archivePath, report);
 
-            // 2. Рекурсивный аудит архива (включая вложенные .zip/.rar/.7z "матрёшки"!)
             try
             {
+                long nestedBudgetUsed = 0;
                 using var fs = File.OpenRead(archivePath);
-                ScanArchiveStreamRecursive(fs, fi.Name, report, currentDepth: 0);
+                ScanArchiveStreamRecursive(fs, fi.Name, report, currentDepth: 0, ref nestedBudgetUsed);
             }
             catch (Exception ex)
             {
-                report.Warnings.Add($"Не удалось полностью прочитать структуру архива: {ex.Message}");
+                report.HeuristicWarnings.Add($"Не удалось полностью прочитать структуру архива: {ex.Message}");
             }
 
             return report;
@@ -181,26 +186,30 @@ public class SecurityScannerService
 
         if (domain.Contains("nexusmods.com", StringComparison.OrdinalIgnoreCase) ||
             domain.Contains("nexus-cdn.com", StringComparison.OrdinalIgnoreCase))
-            return "🟡 Nexus Mods (проверяйте описание автора)";
+            return "🟡 Nexus Mods";
 
         if (domain.Contains("modsfire.com", StringComparison.OrdinalIgnoreCase) ||
             domain.Contains("sharemods.com", StringComparison.OrdinalIgnoreCase) ||
-            domain.Contains("modsbase.com", StringComparison.OrdinalIgnoreCase) ||
-            domain.Contains("modsup.com", StringComparison.OrdinalIgnoreCase))
+            domain.Contains("cloudflarestorage.com", StringComparison.OrdinalIgnoreCase))
         {
-            warning = $"Файл скачан с немодерируемого файлообменника ({domain}). Рекомендуется сверить SHA-256 на VirusTotal.";
-            return $"🟠 Внешний файлообменник ({domain})";
+            warning = $"Файл загружен через файловое зеркало ({domain}). Сверьте хеш на VirusTotal.";
+            return $"🟠 Файловое зеркало ({domain})";
         }
 
-        warning = $"Сторонний портал модов ({domain}) — архивы могут быть перезаливами.";
+        warning = $"Сторонний портал модов ({domain}).";
         return $"🟡 Сторонний портал ({domain})";
     }
 
-    private void ScanArchiveStreamRecursive(Stream archiveStream, string containerName, SecurityScanReport report, int currentDepth)
+    private void ScanArchiveStreamRecursive(
+        Stream archiveStream,
+        string containerName,
+        SecurityScanReport report,
+        int currentDepth,
+        ref long nestedBudgetUsed)
     {
         if (currentDepth > MaxNestedScanDepth)
         {
-            report.Warnings.Add($"Превышена глубина вложенности архивов (>{MaxNestedScanDepth}) внутри {containerName}.");
+            report.HeuristicWarnings.Add($"Превышена глубина вложенности архивов (>{MaxNestedScanDepth}) в {containerName}.");
             return;
         }
 
@@ -211,67 +220,84 @@ public class SecurityScannerService
             string ext = Path.GetExtension(entryName).ToLowerInvariant();
             string displayPath = currentDepth == 0 ? entryName : $"{containerName} -> {entryName}";
 
-            // 1. Проверка на запрещённые исполняемые файлы (.exe, .dll, .bat, .ps1 и т.д.)
             if (ForbiddenBinaryExtensions.Contains(ext))
             {
                 report.DangerousBinariesFound.Add(displayPath);
                 continue;
             }
 
-            // 2. Рекурсивная проверка вложенных архивов ("матрёшек" .zip, .rar, .7z)
+            // Потоковая проверка вложенных архивов через временный файл на диске с FileOptions.DeleteOnClose (0 МБ нагрузки на RAM!)
             if (ext is ".zip" or ".rar" or ".7z")
             {
-                if (entry.Size > 0 && entry.Size < 1024L * 1024 * 1024) // до 1 ГБ в памяти/потоке
+                if (entry.Size <= 0) continue;
+
+                if (entry.Size > MaxSingleNestedArchiveBytes || (nestedBudgetUsed + entry.Size) > MaxTotalNestedQuotaBytes)
                 {
-                    report.NestedArchivesScanned++;
-                    try
-                    {
-                        using var entryStream = entry.OpenEntryStream();
-                        using var ms = new MemoryStream();
-                        entryStream.CopyTo(ms);
-                        ms.Position = 0;
-                        ScanArchiveStreamRecursive(ms, Path.GetFileName(entryName), report, currentDepth + 1);
-                    }
-                    catch (Exception ex)
-                    {
-                        report.Warnings.Add($"Не удалось просканировать вложенный архив {displayPath}: {ex.Message}");
-                    }
+                    report.HeuristicWarnings.Add($"Вложенный архив {displayPath} ({entry.Size / 1024 / 1024} MB) превышает квоту вложенной проверки.");
+                    continue;
                 }
-                else if (entry.Size >= 1024L * 1024 * 1024)
+
+                nestedBudgetUsed += entry.Size;
+                report.NestedArchivesScanned++;
+
+                string tempNestedFile = Path.Combine(Path.GetTempPath(), "BeamNG_NestedScan_" + Guid.NewGuid().ToString("N") + ext);
+                try
                 {
-                    report.Warnings.Add($"Вложенный архив {displayPath} слишком велик для проверки в памяти (>1 ГБ).");
+                    using var entryStream = entry.OpenEntryStream();
+                    using var tempFs = new FileStream(
+                        tempNestedFile,
+                        FileMode.CreateNew,
+                        FileAccess.ReadWrite,
+                        FileShare.None,
+                        bufferSize: 81920,
+                        FileOptions.DeleteOnClose);
+
+                    entryStream.CopyTo(tempFs);
+                    tempFs.Position = 0;
+                    ScanArchiveStreamRecursive(tempFs, Path.GetFileName(entryName), report, currentDepth + 1, ref nestedBudgetUsed);
+                }
+                catch (Exception ex)
+                {
+                    report.HeuristicWarnings.Add($"Не удалось просканировать вложенный архив {displayPath}: {ex.Message}");
                 }
                 continue;
             }
 
-            // 3. Проверка всех .lua файлов (включая файлы > 2 МБ!)
+            // Двухуровневая проверка .lua скриптов с предварительной очисткой комментариев
             if (ext == ".lua" && entry.Size > 0)
             {
                 report.LuaFilesScanned++;
                 if (entry.Size > 2_000_000)
                 {
-                    report.Warnings.Add($"Аномально большой Lua-скрипт ({entry.Size / 1024 / 1024.0:F1} MB): {displayPath}");
+                    report.HeuristicWarnings.Add($"Крупный Lua-скрипт ({entry.Size / 1024 / 1024.0:F1} MB): {displayPath}");
                 }
 
-                // Читаем и сканируем до 15 МБ текста Lua-скрипта
                 if (entry.Size <= 15_000_000)
                 {
                     using var stream = entry.OpenEntryStream();
                     using var reader = new StreamReader(stream);
-                    string luaCode = reader.ReadToEnd();
+                    string rawLua = reader.ReadToEnd();
+                    string cleanLua = StripLuaComments(rawLua);
 
-                    foreach (var (pattern, desc) in DangerousLuaSignatures)
+                    foreach (var (pattern, desc) in CriticalLuaExploitSignatures)
                     {
-                        if (Regex.IsMatch(luaCode, pattern, RegexOptions.IgnoreCase))
+                        if (Regex.IsMatch(cleanLua, pattern, RegexOptions.IgnoreCase))
                         {
-                            report.SuspiciousLuaPatternsFound.Add($"{Path.GetFileName(entryName)}: {desc}");
+                            report.CriticalLuaExploitsFound.Add($"{Path.GetFileName(entryName)}: {desc}");
+                        }
+                    }
+
+                    foreach (var (pattern, desc) in HeuristicLuaWarningSignatures)
+                    {
+                        if (Regex.IsMatch(cleanLua, pattern, RegexOptions.IgnoreCase))
+                        {
+                            report.HeuristicWarnings.Add($"{Path.GetFileName(entryName)}: {desc}");
                         }
                     }
                 }
                 continue;
             }
 
-            // 4. Спокойная проверка .js файлов (без ложных срабатываний на легальный UI BeamNG)
             if (ext == ".js" && entry.Size > 0 && entry.Size <= 5_000_000)
             {
                 report.UiJsFilesCount++;
@@ -279,21 +305,24 @@ public class SecurityScannerService
                 using var reader = new StreamReader(stream);
                 string jsCode = reader.ReadToEnd();
 
-                foreach (var (pattern, desc) in DangerousJsSignatures)
+                foreach (var (pattern, desc) in CriticalJsSignatures)
                 {
                     if (Regex.IsMatch(jsCode, pattern, RegexOptions.IgnoreCase))
                     {
-                        report.SuspiciousLuaPatternsFound.Add($"{Path.GetFileName(entryName)} (JS): {desc}");
+                        report.CriticalLuaExploitsFound.Add($"{Path.GetFileName(entryName)} (JS): {desc}");
                     }
                 }
             }
         }
     }
 
-    /// <summary>
-    /// Честный запуск Microsoft Defender без сокрытия таймаутов и ошибок:
-    /// DefenderConfirmedClean = true ставится ТОЛЬКО если процесс реально завершился с кодом 0!
-    /// </summary>
+    private static string StripLuaComments(string luaCode)
+    {
+        // Удаляем блочные комментарии --[[ ... ]] и однострочные комментарии --...
+        string noBlock = Regex.Replace(luaCode, @"--\[\[[\s\S]*?\]\]", "", RegexOptions.Multiline);
+        return Regex.Replace(noBlock, @"--[^\r\n]*", "");
+    }
+
     private static void RunWindowsDefenderScan(string filePath, SecurityScanReport report)
     {
         try
@@ -302,7 +331,7 @@ public class SecurityScannerService
             if (mpCmdRun == null)
             {
                 report.DefenderConfirmedClean = false;
-                report.DefenderStatus = "⚠️ Сканер Microsoft Defender (MpCmdRun.exe) не найден на ПК — антивирусная проверка НЕ выполнялась.";
+                report.DefenderStatus = "⚠️ Сканер Microsoft Defender (MpCmdRun.exe) не найден — антивирусная проверка НЕ выполнялась.";
                 return;
             }
 
@@ -324,13 +353,12 @@ public class SecurityScannerService
                 return;
             }
 
-            // Ждём до 120 секунд (для крупных архивов 350–500 МБ)
             bool exited = proc.WaitForExit(120_000);
             if (!exited)
             {
                 try { proc.Kill(); } catch { }
                 report.DefenderConfirmedClean = false;
-                report.DefenderStatus = "⚠️ НЕ ЗАВЕРШЕНО: Сканирование Defender превысило 120 сек. (файл слишком большой). Проверьте хеш на VirusTotal!";
+                report.DefenderStatus = "⚠️ НЕ ЗАВЕРШЕНО: Сканирование Defender превысило 120 сек. Проверьте хеш на VirusTotal!";
                 return;
             }
 
@@ -338,7 +366,7 @@ public class SecurityScannerService
             if (code == 0)
             {
                 report.DefenderConfirmedClean = true;
-                report.DefenderStatus = "✅ Microsoft Defender: Проверка успешно завершена, угроз нет (Код 0)";
+                report.DefenderStatus = "✅ Microsoft Defender: Проверка завершена, угроз нет (Код 0)";
             }
             else if (code == 2)
             {
@@ -349,7 +377,7 @@ public class SecurityScannerService
             else
             {
                 report.DefenderConfirmedClean = false;
-                report.DefenderStatus = $"⚠️ Microsoft Defender вернул нестандартный код ({code}) — безопасность НЕ подтверждена.";
+                report.DefenderStatus = $"⚠️ Microsoft Defender вернул код ({code}) — безопасность НЕ подтверждена.";
             }
         }
         catch (Exception ex)
