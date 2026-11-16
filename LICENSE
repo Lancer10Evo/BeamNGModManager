@@ -1,17 +1,71 @@
-﻿MIT License
+﻿PROPRIETARY SOURCE-AVAILABLE LICENSE (ALL RIGHTS RESERVED)
+ЛИЦЕНЗИОННОЕ СОГЛАШЕНИЕ (ВСЕ ПРАВА ЗАЩИЩЕНЫ)
 
-Copyright (c) 2026 BeamNGModManager
+Copyright (c) 2026 Lancer10Evo (https://github.com/Lancer10Evo/BeamNGModManager)
+All Rights Reserved. / Все права защищены.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+============================================================================
+РУССКАЯ ВЕРСИЯ (RUSSIAN VERSION)
+============================================================================
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Данное программное обеспечение («BeamNG.drive Mod Manager») и его исходный код
+являются интеллектуальной собственностью автора (Lancer10Evo) и защищены законами
+об авторском праве и международными соглашениями.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+1. РАЗРЕШЁННОЕ ИСПОЛЬЗОВАНИЕ:
+   - Разрешается бесплатное скачивание и использование скомпилированной программы
+     исключительно в ЛИЧНЫХ НЕКОММЕРЧЕСКИХ целях.
+   - Исходный код опубликован в репозитории исключительно для ознакомления
+     (Source-Available) и проверки безопасности.
+
+2. СТРОГИЕ ОГРАНИЧЕНИЯ И ЗАПРЕТЫ (БЕЗ ПИСЬМЕННОГО РАЗРЕШЕНИЯ АВТОРА ЗАПРЕЩЕНО):
+   - ЗАПРЕЩЕНО КОПИРОВАНИЕ И СОЗДАНИЕ КЛОНОВ: Запрещается копировать, публиковать,
+     создавать производные работы (форки, клоны, модификации), переименовывать
+     программу или использовать фрагменты её исходного кода в других проектах.
+   - ЗАПРЕЩЕНО КОММЕРЧЕСКОЕ ИСПОЛЬЗОВАНИЕ: Запрещается продавать программу,
+     сдавать в аренду, распространять по платной подписке (Patreon, Boosty и др.),
+     а также включать её в состав платных сборок модов, репаков или платных лаунчеров.
+   - ЗАПРЕЩЕНА ПЕРЕУПАКОВКА И ПЕРЕЗАЛИВ: Запрещается модифицировать исполняемый файл (.exe),
+     вшивать в него сторонние установщики или рекламу, а также размещать программу
+     на сторонних ресурсах без указания автора (Lancer10Evo) и прямой ссылки на
+     официальный репозиторий GitHub.
+   - ЗАПРЕЩЕНО УДАЛЕНИЕ АВТОРСТВА: Запрещается удалять или изменять уведомления
+     об авторских правах, логотипы и ссылки на автора внутри программы и документации.
+
+3. ОТКАЗ ОТ ГАРАНТИЙ:
+   Программа предоставляется «КАК ЕСТЬ» (AS IS), без каких-либо гарантий. Автор не
+   несёт ответственности за любой прямой или косвенный ущерб, потерю данных или
+   содержимое сторонних модификаций, загружаемых пользователем.
+
+Нарушение любого из пунктов данной лицензии влечёт за собой автоматическое
+прекращение права на использование программы и ответственность в соответствии
+с действующим законодательством об охране авторских прав (включая DMCA).
+
+============================================================================
+ENGLISH VERSION
+============================================================================
+
+This software ("BeamNG.drive Mod Manager") and its source code are the exclusive
+intellectual property of the author (Lancer10Evo). All rights are reserved.
+
+1. PERMITTED USE:
+   - You may download and use the unmodified compiled binary for PERSONAL,
+     NON-COMMERCIAL purposes only.
+   - The source code is made available strictly for review, educational inspection,
+     and security auditing (Source-Available).
+
+2. STRICT PROHIBITIONS (WITHOUT PRIOR WRITTEN PERMISSION FROM THE AUTHOR):
+   - NO COPYING OR DERIVATIVE WORKS: You may NOT copy, redistribute, fork, clone,
+     modify, rebrand, or use any part of this source code in your own projects.
+   - NO COMMERCIAL USE: You may NOT sell, rent, monetize, lock behind a paywall
+     (Patreon, Boosty, etc.), or bundle this software with paid mod packs or launchers.
+   - NO UNAUTHORIZED REDISTRIBUTION: You may NOT repackage, bundle with adware, or
+     re-upload the binary to third-party websites without explicit attribution and a
+     direct link to the official GitHub repository (https://github.com/Lancer10Evo/BeamNGModManager).
+   - NO REMOVAL OF ATTRIBUTION: You may NOT remove or alter any copyright notices,
+     credits, or author references.
+
+3. DISCLAIMER OF WARRANTY:
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. IN NO EVENT SHALL
+   THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE
+   USE OF THE SOFTWARE OR THIRD-PARTY MODS.
