@@ -1,0 +1,44 @@
+﻿name: Build & Auto-Release
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish Single-File EXE
+        run: dotnet publish -c Release -r win-x64 --self-contained true
+
+      - name: Read Version from csproj
+        id: get_version
+        shell: pwsh
+        run: |
+          [xml]$csproj = Get-Content .\BeamNGModManager.csproj
+          $ver = $csproj.Project.PropertyGroup.Version | Select-Object -First 1
+          Write-Output "version=v$ver" >> $env:GITHUB_OUTPUT
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: "BeamNG.drive Mod Manager ${{ steps.get_version.outputs.version }}"
+          body: |
+            ### 🚗 Автоматический релиз ${{ steps.get_version.outputs.version }}
+            Скачайте готовый портативный файл **BeamNGModManager.exe** ниже (не требует установки).
+          files: bin/Release/net8.0-windows/win-x64/publish/BeamNGModManager.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
