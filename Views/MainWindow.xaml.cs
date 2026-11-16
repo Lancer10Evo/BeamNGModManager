@@ -71,23 +71,19 @@ public partial class MainWindow : Window
         FilterActive.Content = _loc.Get("filter_active");
         FilterDisabled.Content = _loc.Get("filter_disabled");
         ChkHardlinks.Content = _loc.Get("use_hardlinks");
-        BtnClearCache.Content = $"🧹 {_loc.Get("clear_cache")}";
-        BtnCheckConflicts.Content = $"⚡ {_loc.Get("check_conflicts")}";
-        BtnCheckUpdates.Content = $"🔄 {_loc.Get("check_updates")}";
         BtnLaunchGame.Content = $"▶ {_loc.Get("launch_game")}";
 
         ColActive.Header = _loc.Get("col_active");
         ColName.Header = _loc.Get("col_name");
         ColAuthor.Header = _loc.Get("col_author");
         ColVersion.Header = _loc.Get("col_version");
-        ColFile.Header = _loc.Get("col_file");
         ColSize.Header = _loc.Get("col_size");
     }
 
     private async Task ReloadModsListAsync()
     {
         if (ActiveProfile == null) return;
-        _allMods = await _modManager.LoadModsAsync(ActiveProfile.ModsPath);
+        _allMods = await _modManager.LoadModsAsync(ActiveProfile.ModsPath, _pathResolver.Config.FavoriteMods);
         ActiveProfile.ModsCount = _allMods.Count;
         UpdateDashboardStats();
         ApplySearchAndFilter();
@@ -114,25 +110,74 @@ public partial class MainWindow : Window
         string query = TxtSearch.Text.Trim();
         int filterIndex = CmbFilter.SelectedIndex;
 
-        var filtered = _allMods.Where(m =>
-        {
-            if (filterIndex == 1 && !m.IsEnabled) return false;
-            if (filterIndex == 2 && m.IsEnabled) return false;
-            if (filterIndex == 3 && !m.Category.Contains("Авто")) return false;
-            if (filterIndex == 4 && !m.Category.Contains("Карта")) return false;
-            if (filterIndex == 5 && !m.Category.Contains("Скрипт")) return false;
-
-            if (!string.IsNullOrEmpty(query))
+        var filtered = _allMods
+            .Where(m =>
             {
-                return m.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                       m.Author.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                       m.FileName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                       m.Category.Contains(query, StringComparison.OrdinalIgnoreCase);
-            }
-            return true;
-        }).ToList();
+                if (filterIndex == 1 && !m.IsEnabled) return false;
+                if (filterIndex == 2 && m.IsEnabled) return false;
+                if (filterIndex == 3 && !m.IsFavorite) return false;
+                if (filterIndex == 4 && m.SourceTag != "🌐 BeamMP") return false;
+                if (filterIndex == 5 && !m.Category.Contains("Авто")) return false;
+                if (filterIndex == 6 && !m.Category.Contains("Карта")) return false;
+                if (filterIndex == 7 && !m.Category.Contains("Скрипт")) return false;
+
+                if (!string.IsNullOrEmpty(query))
+                {
+                    return m.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                           m.Author.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                           m.FileName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                           m.Category.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                           m.SourceTag.Contains(query, StringComparison.OrdinalIgnoreCase);
+                }
+                return true;
+            })
+            .OrderByDescending(m => m.IsFavorite)
+            .ThenBy(m => m.DisplayName)
+            .ToList();
 
         GridMods.ItemsSource = filtered;
+    }
+
+    // --- Инспектор выбранного мода (правая панель) ---
+    private void GridMods_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (GridMods.SelectedItem is ModItem mod)
+        {
+            ImgInspectorPreview.Source = mod.PreviewImage;
+            TxtInspectorTitle.Text = mod.DisplayName;
+            TxtInspectorFile.Text = $"{mod.FileName} ({mod.SizeFormatted})";
+            TxtInspectorMeta.Text = $"{mod.Category}  •  {mod.SourceTag}  •  Автор: {mod.Author}";
+            TxtInspectorStructure.Text = mod.InternalStructure;
+        }
+    }
+
+    private void BtnRevealSelectedMod_Click(object sender, RoutedEventArgs e)
+    {
+        if (GridMods.SelectedItem is ModItem mod && File.Exists(mod.FullPath))
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{mod.FullPath}\"") { UseShellExecute = true });
+        }
+    }
+
+    // --- Избранное (★) ---
+    private void BtnFavoriteMod_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is ModItem mod)
+        {
+            mod.IsFavorite = !mod.IsFavorite;
+            if (mod.IsFavorite)
+            {
+                if (!_pathResolver.Config.FavoriteMods.Contains(mod.FileName, StringComparer.OrdinalIgnoreCase))
+                    _pathResolver.Config.FavoriteMods.Add(mod.FileName);
+            }
+            else
+            {
+                _pathResolver.Config.FavoriteMods.RemoveAll(x => x.Equals(mod.FileName, StringComparison.OrdinalIgnoreCase));
+            }
+
+            _pathResolver.SaveConfig();
+            ApplySearchAndFilter();
+        }
     }
 
     // --- Установка модов ---
@@ -189,7 +234,7 @@ public partial class MainWindow : Window
         }
     }
 
-    // --- Включение / Отключение (Одиночное и Массовое) ---
+    // --- Включение / Отключение ---
     private void ModCheckBox_Click(object sender, RoutedEventArgs e)
     {
         if (ActiveProfile == null) return;
@@ -225,6 +270,27 @@ public partial class MainWindow : Window
         ApplySearchAndFilter();
     }
 
+    /// <summary>
+    /// Режим BeamMP: отключает все одиночные моды и включает только мультиплеерные моды (BeamMP.zip),
+    /// чтобы серверы BeamMP не кикали за сторонние модификации!
+    /// </summary>
+    private void BtnBeamMpOnlyMode_Click(object sender, RoutedEventArgs e)
+    {
+        if (ActiveProfile == null) return;
+        foreach (var mod in _allMods)
+        {
+            bool shouldBeActive = mod.SourceTag == "🌐 BeamMP";
+            if (mod.IsEnabled != shouldBeActive)
+            {
+                mod.IsEnabled = shouldBeActive;
+                _modManager.ToggleModState(mod, ActiveProfile.ModsPath, _pathResolver.Config.UseHardlinks);
+            }
+        }
+        UpdateDashboardStats();
+        ApplySearchAndFilter();
+        LblStatus.Text = "🌐 Включён режим BeamMP: активны только моды мультиплеера.";
+    }
+
     private async void BtnDeleteMod_Click(object sender, RoutedEventArgs e)
     {
         if (ActiveProfile == null) return;
@@ -242,23 +308,45 @@ public partial class MainWindow : Window
         }
     }
 
-    // --- АДДОН: Менеджер пресетов (Сборок модов) ---
+    // --- Именные Loadouts (Сборки с самовосстановлением как в BMM) ---
     private void BtnSavePreset_Click(object sender, RoutedEventArgs e)
     {
+        string customName = TxtPresetName.Text.Trim();
+        if (string.IsNullOrEmpty(customName))
+            customName = $"Loadout #{_pathResolver.Config.Presets.Count + 1}";
+
         var enabledFiles = _allMods.Where(m => m.IsEnabled).Select(m => m.FileName).ToList();
-        var preset = new ModPreset
+
+        // Если Loadout с таким именем уже есть — обновляем его
+        var existing = _pathResolver.Config.Presets.FirstOrDefault(p => p.Name.Equals(customName, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
         {
-            Name = $"Сборка #{_pathResolver.Config.Presets.Count + 1} ({DateTime.Now:dd.MM HH:mm})",
-            EnabledModFiles = enabledFiles
-        };
+            existing.EnabledModFiles = enabledFiles;
+            _pathResolver.SaveConfig();
+            RefreshPresetsCombo();
+            CmbPresets.SelectedItem = existing;
+        }
+        else
+        {
+            var preset = new ModPreset { Name = customName, EnabledModFiles = enabledFiles };
+            _pathResolver.Config.Presets.Add(preset);
+            _pathResolver.SaveConfig();
+            RefreshPresetsCombo();
+            CmbPresets.SelectedItem = preset;
+        }
 
-        _pathResolver.Config.Presets.Add(preset);
-        _pathResolver.SaveConfig();
-        RefreshPresetsCombo();
-        CmbPresets.SelectedItem = preset;
-
-        MessageBox.Show($"Пресет «{preset.Name}» сохранён!\nАктивных модов в сборке: {enabledFiles.Count}",
+        MessageBox.Show($"🎛️ Loadout «{customName}» сохранён!\nАктивных модов в сборке: {enabledFiles.Count}",
             Title, MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void BtnDeletePreset_Click(object sender, RoutedEventArgs e)
+    {
+        if (CmbPresets.SelectedItem is ModPreset preset)
+        {
+            _pathResolver.Config.Presets.Remove(preset);
+            _pathResolver.SaveConfig();
+            RefreshPresetsCombo();
+        }
     }
 
     private void CmbPresets_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -266,6 +354,13 @@ public partial class MainWindow : Window
         if (ActiveProfile == null) return;
         if (CmbPresets.SelectedItem is ModPreset preset)
         {
+            TxtPresetName.Text = preset.Name;
+
+            // Self-Healing Loadout: очищаем из пресета моды, которые были удалены с диска
+            var existingOnDisk = new HashSet<string>(_allMods.Select(m => m.FileName), StringComparer.OrdinalIgnoreCase);
+            preset.EnabledModFiles.RemoveAll(f => !existingOnDisk.Contains(f));
+            _pathResolver.SaveConfig();
+
             var activeSet = new HashSet<string>(preset.EnabledModFiles, StringComparer.OrdinalIgnoreCase);
             foreach (var mod in _allMods)
             {
@@ -281,7 +376,7 @@ public partial class MainWindow : Window
         }
     }
 
-    // --- АДДОН: Тестер / Симулятор Лицензии (Steam & Epic Games) ---
+    // --- Диагностика Лицензий, Здоровье и BeamMP ---
     private void BtnTestLicense_Click(object sender, RoutedEventArgs e)
     {
         string report = _pathResolver.RunLicenseSimulatorTest();
@@ -289,7 +384,45 @@ public partial class MainWindow : Window
             MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
-    // --- Управление профилями и папкой ---
+    private async void BtnHealthCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (ActiveProfile == null) return;
+        string report = await _maintenance.RunHealthCheckAsync(_allMods, ActiveProfile.ModsPath);
+        MessageBox.Show(report, "🩺 Health Center & Поиск Дубликатов", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private async void BtnCleanBeamMpCache_Click(object sender, RoutedEventArgs e)
+    {
+        if (ActiveProfile == null) return;
+        var (count, mb) = _maintenance.CleanBeamMpServerCache(ActiveProfile.ModsPath);
+        await ReloadModsListAsync();
+        MessageBox.Show($"🌐 Кэш серверов BeamMP очищен!\nКлиентский мод BeamMP.zip сохранён.\nУдалено чужих модов: {count} шт. ({mb:F1} MB)",
+            Title, MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void BtnLaunchBeamMp_Click(object sender, RoutedEventArgs e)
+    {
+        if (_maintenance.LaunchBeamMp(_pathResolver.Config.BeamMpExePath, out string resolved))
+        {
+            _pathResolver.Config.BeamMpExePath = resolved;
+            _pathResolver.SaveConfig();
+            return;
+        }
+
+        var dlg = new OpenFileDialog
+        {
+            Title = "Укажите путь к BeamMP-Launcher.exe (только один раз)",
+            Filter = "BeamMP Launcher (BeamMP-Launcher.exe)|*.exe"
+        };
+
+        if (dlg.ShowDialog() == true)
+        {
+            _pathResolver.Config.BeamMpExePath = dlg.FileName;
+            _pathResolver.SaveConfig();
+            _maintenance.LaunchBeamMp(dlg.FileName, out _);
+        }
+    }
+
     private void BtnOpenFolder_Click(object sender, RoutedEventArgs e)
     {
         if (ActiveProfile == null || !Directory.Exists(ActiveProfile.ModsPath)) return;
@@ -337,7 +470,6 @@ public partial class MainWindow : Window
         await ReloadModsListAsync();
     }
 
-    // --- Обслуживание ---
     private void BtnClearCache_Click(object sender, RoutedEventArgs e)
     {
         if (ActiveProfile == null) return;

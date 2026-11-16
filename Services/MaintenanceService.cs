@@ -7,13 +7,9 @@ namespace BeamNGModManager.Services;
 
 public class MaintenanceService
 {
-    /// <summary>
-    /// 1. Безопасная очистка кэша: удаление содержимого <UserPath>\<версия>\temp,
-    /// исключая папку shaders (чтобы избежать долгой перекомпиляции шейдеров).
-    /// </summary>
     public int ClearCacheKeepingShaders(GameProfile profile)
     {
-        string versionRoot = string.IsNullOrEmpty(profile.ActiveVersion)
+        string versionRoot = string.IsNullOrEmpty(profile.ActiveVersion) || profile.ActiveVersion == "root" || profile.ActiveVersion == "custom"
             ? profile.UserPath
             : Path.Combine(profile.UserPath, profile.ActiveVersion);
 
@@ -23,23 +19,16 @@ public class MaintenanceService
 
         int deletedFilesCount = 0;
 
-        // Удаляем отдельные файлы в корне папки temp
         foreach (string file in Directory.GetFiles(tempPath))
         {
-            try
-            {
-                File.Delete(file);
-                deletedFilesCount++;
-            }
-            catch { }
+            try { File.Delete(file); deletedFilesCount++; } catch { }
         }
 
-        // Удаляем все подпапки внутри temp, КРОМЕ папки shaders
         foreach (string dir in Directory.GetDirectories(tempPath))
         {
             string dirName = Path.GetFileName(dir);
             if (dirName.Equals("shaders", StringComparison.OrdinalIgnoreCase))
-                continue; // Пропускаем кэш шейдеров!
+                continue;
 
             try
             {
@@ -54,15 +43,87 @@ public class MaintenanceService
     }
 
     /// <summary>
-    /// 2. Проверка конфликтов (базовая): поиск активных модов с одинаковыми путями файлов внутри .zip архивов
+    /// Очистка скачанных модов серверов BeamMP (из папки mods\multiplayer\), сохраняя сам клиент BeamMP.zip
     /// </summary>
+    public (int removedCount, double freedMb) CleanBeamMpServerCache(string modsPath)
+    {
+        string mpDir = Path.Combine(modsPath, "multiplayer");
+        if (!Directory.Exists(mpDir))
+            return (0, 0);
+
+        int count = 0;
+        long bytes = 0;
+
+        foreach (string file in Directory.GetFiles(mpDir, "*.*", SearchOption.AllDirectories))
+        {
+            string fileName = Path.GetFileName(file);
+            // Никогда не удаляем сам клиентский мод BeamMP.zip!
+            if (fileName.Equals("BeamMP.zip", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            try
+            {
+                var fi = new FileInfo(file);
+                bytes += fi.Length;
+                File.Delete(file);
+                count++;
+            }
+            catch { }
+        }
+
+        return (count, bytes / 1024.0 / 1024.0);
+    }
+
+    /// <summary>
+    /// Health Center (как в Mod Manager Pro и BMM): поиск дубликатов, битых архивов и не-ZIP файлов
+    /// </summary>
+    public async Task<string> RunHealthCheckAsync(IEnumerable<ModItem> allMods, string modsPath)
+    {
+        return await Task.Run(() =>
+        {
+            var mods = allMods.ToList();
+            var nonZipMods = mods.Where(m => !m.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)).ToList();
+            var zeroByteMods = mods.Where(m => m.SizeBytes == 0).ToList();
+
+            // Поиск дубликатов по совпадению отображаемого названия или точного размера в байтах (>100 КБ)
+            var duplicateGroups = mods
+                .Where(m => m.SizeBytes > 100_000)
+                .GroupBy(m => m.SizeBytes)
+                .Where(g => g.Count() > 1)
+                .Select(g => string.Join(" == ", g.Select(x => x.FileName)))
+                .ToList();
+
+            string mpDir = Path.Combine(modsPath, "multiplayer");
+            int serverModsCount = 0;
+            double serverModsMb = 0;
+            if (Directory.Exists(mpDir))
+            {
+                var serverFiles = Directory.GetFiles(mpDir, "*.zip")
+                    .Where(f => !Path.GetFileName(f).Equals("BeamMP.zip", StringComparison.OrdinalIgnoreCase))
+                    .Select(f => new FileInfo(f))
+                    .ToList();
+                serverModsCount = serverFiles.Count;
+                serverModsMb = serverFiles.Sum(f => f.Length) / 1024.0 / 1024.0;
+            }
+
+            return $"🩺 ОТЧЁТ ЦЕНТРА ЗДОРОВЬЯ (Health Center):\n\n" +
+                   $"• Всего проверено модов: {mods.Count}\n" +
+                   $"• Дубликаты модов (одинаковый вес): {(duplicateGroups.Count == 0 ? "✅ Не найдено" : $"⚠️ Найдено ({duplicateGroups.Count}):\n   " + string.Join("\n   ", duplicateGroups.Take(5)))}\n\n" +
+                   $"• Архивы не в формате .ZIP (.rar/.7z в папке mods): {(nonZipMods.Count == 0 ? "✅ Нет" : $"⚠️ {nonZipMods.Count} шт. ({string.Join(", ", nonZipMods.Select(x => x.FileName))})")}\n" +
+                   $"• Повреждённые (пустые) файлы: {(zeroByteMods.Count == 0 ? "✅ Нет" : $"❌ {zeroByteMods.Count} шт.")}\n\n" +
+                   $"🌐 Кэш серверов BeamMP (mods\\multiplayer):\n" +
+                   $"• Чужих серверных модов: {serverModsCount} шт. ({serverModsMb:F1} MB)\n" +
+                   $"  (Вы можете очистить их кнопкой «🌐 Кэш MP», сохранив клиент BeamMP.zip)";
+        });
+    }
+
     public async Task<Dictionary<string, List<string>>> DetectConflictsAsync(IEnumerable<ModItem> activeMods)
     {
         return await Task.Run(() =>
         {
             var fileToModsMap = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var mod in activeMods.Where(m => m.IsEnabled && File.Exists(m.FullPath)))
+            foreach (var mod in activeMods.Where(m => m.IsEnabled && File.Exists(m.FullPath) && m.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
             {
                 try
                 {
@@ -70,11 +131,9 @@ public class MaintenanceService
                     foreach (var entry in archive.Entries)
                     {
                         if (string.IsNullOrEmpty(entry.Name))
-                            continue; // Пропускаем записи директорий
+                            continue;
 
                         string virtualPath = entry.FullName.Replace('\\', '/').TrimStart('/');
-
-                        // Игнорируем служебные метаданные репозитория и ОС
                         if (virtualPath.StartsWith("mod_info/", StringComparison.OrdinalIgnoreCase) ||
                             virtualPath.Equals("info.json", StringComparison.OrdinalIgnoreCase) ||
                             entry.Name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase) ||
@@ -96,16 +155,12 @@ public class MaintenanceService
                 catch { }
             }
 
-            // Оставляем только те файлы, которые перезаписываются сразу двумя или более модами
             return fileToModsMap
                 .Where(kv => kv.Value.Count > 1)
                 .ToDictionary(kv => kv.Key, kv => kv.Value);
         });
     }
 
-    /// <summary>
-    /// 3. Быстрый запуск: старт BeamNG.drive.exe выбранного профиля напрямую из менеджера
-    /// </summary>
     public bool LaunchGame(GameProfile profile)
     {
         if (string.IsNullOrWhiteSpace(profile.GameRootPath))
@@ -128,14 +183,41 @@ public class MaintenanceService
             UseShellExecute = true
         };
 
-        // Если это кастомный/портативный профиль, передаём игре точный путь к UserPath
-        if (!string.IsNullOrWhiteSpace(profile.UserPath) &&
-            profile.DetectionSource.StartsWith("1:"))
-        {
-            startInfo.Arguments = $"-userpath \"{profile.UserPath}\"";
-        }
-
         Process.Start(startInfo);
+        return true;
+    }
+
+    /// <summary>
+    /// Автопоиск и запуск лаунчера мультиплеера BeamMP-Launcher.exe
+    /// </summary>
+    public bool LaunchBeamMp(string? savedBeamMpPath, out string resolvedPath)
+    {
+        resolvedPath = string.Empty;
+        var candidates = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(savedBeamMpPath))
+            candidates.Add(savedBeamMpPath);
+
+        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+
+        candidates.Add(Path.Combine(appData, "BeamMP-Launcher", "BeamMP-Launcher.exe"));
+        candidates.Add(Path.Combine(localAppData, "BeamMP-Launcher", "BeamMP-Launcher.exe"));
+        candidates.Add(Path.Combine(desktop, "BeamMP-Launcher.exe"));
+        candidates.Add(@"C:\Games\BeamMP-Launcher\BeamMP-Launcher.exe");
+
+        string? found = candidates.FirstOrDefault(File.Exists);
+        if (found == null)
+            return false;
+
+        resolvedPath = found;
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = found,
+            WorkingDirectory = Path.GetDirectoryName(found) ?? "",
+            UseShellExecute = true
+        });
         return true;
     }
 }

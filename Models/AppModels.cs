@@ -24,11 +24,14 @@ public class GameProfile
     public override string ToString() => $"{ShortTitle} ({ModsCount} мод.) — {ModsPath}";
 }
 
+/// <summary>
+/// Именной Loadout (Сборка модов как в BMM)
+/// </summary>
 public class ModPreset
 {
     public string Name { get; set; } = string.Empty;
     public List<string> EnabledModFiles { get; set; } = new();
-    public override string ToString() => $"📦 {Name} ({EnabledModFiles.Count} актив.)";
+    public override string ToString() => $"🎛️ {Name} ({EnabledModFiles.Count} мод.)";
 }
 
 public class AppConfig
@@ -36,7 +39,8 @@ public class AppConfig
     public string Language { get; set; } = "ru";
     public int SelectedProfileIndex { get; set; } = 0;
     public bool UseHardlinks { get; set; } = false;
-    public string CentralLibraryPath { get; set; } = string.Empty;
+    public string BeamMpExePath { get; set; } = string.Empty;
+    public List<string> FavoriteMods { get; set; } = new();
     public List<GameProfile> Profiles { get; set; } = new();
     public List<ModPreset> Presets { get; set; } = new();
 }
@@ -44,6 +48,7 @@ public class AppConfig
 public class ModItem : INotifyPropertyChanged
 {
     private bool _isEnabled;
+    private bool _isFavorite;
 
     public string FileName { get; set; } = string.Empty;
     public string FullPath { get; set; } = string.Empty;
@@ -51,6 +56,8 @@ public class ModItem : INotifyPropertyChanged
     public string Author { get; set; } = "—";
     public string Version { get; set; } = "—";
     public string Category { get; set; } = "📦 Мод";
+    public string SourceTag { get; set; } = "📁 Local";
+    public string InternalStructure { get; set; } = "—";
     public long SizeBytes { get; set; }
     public string SizeFormatted => $"{SizeBytes / 1024.0 / 1024.0:F2} MB";
     public BitmapImage? PreviewImage { get; set; }
@@ -67,6 +74,22 @@ public class ModItem : INotifyPropertyChanged
             }
         }
     }
+
+    public bool IsFavorite
+    {
+        get => _isFavorite;
+        set
+        {
+            if (_isFavorite != value)
+            {
+                _isFavorite = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(FavoriteStar));
+            }
+        }
+    }
+
+    public string FavoriteStar => IsFavorite ? "★" : "☆";
 
     public event PropertyChangedEventHandler? PropertyChanged;
     protected void OnPropertyChanged([CallerMemberName] string? name = null) =>

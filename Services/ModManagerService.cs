@@ -12,13 +12,14 @@ public class ModManagerService
     [DllImport("Kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool CreateHardLink(string lpFileName, string lpExistingFileName, IntPtr lpSecurityAttributes);
 
-    public async Task<List<ModItem>> LoadModsAsync(string modsPath)
+    public async Task<List<ModItem>> LoadModsAsync(string modsPath, IEnumerable<string>? favoriteFileNames = null)
     {
         return await Task.Run(() =>
         {
             var list = new List<ModItem>();
             if (!Directory.Exists(modsPath)) return list;
 
+            var favSet = new HashSet<string>(favoriteFileNames ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
             string disabledDir = Path.Combine(modsPath, "_disabled");
 
             var allFiles = Directory.GetFiles(modsPath, "*.*", SearchOption.AllDirectories)
@@ -34,7 +35,11 @@ public class ModManagerService
                 .ToList();
 
             foreach (string file in activeFiles)
-                list.Add(ParseModZip(file, isEnabled: true));
+            {
+                var item = ParseModZip(file, isEnabled: true);
+                item.IsFavorite = favSet.Contains(item.FileName);
+                list.Add(item);
+            }
 
             if (Directory.Exists(disabledDir))
             {
@@ -51,29 +56,50 @@ public class ModManagerService
                     if (activeNames.Contains(Path.GetFileName(file)))
                         continue;
 
-                    list.Add(ParseModZip(file, isEnabled: false));
+                    var item = ParseModZip(file, isEnabled: false);
+                    item.IsFavorite = favSet.Contains(item.FileName);
+                    list.Add(item);
                 }
             }
 
-            return list.OrderBy(m => m.DisplayName).ToList();
+            // Избранные моды всегда наверху, далее по алфавиту
+            return list
+                .OrderByDescending(m => m.IsFavorite)
+                .ThenBy(m => m.DisplayName)
+                .ToList();
         });
     }
 
     private ModItem ParseModZip(string zipPath, bool isEnabled)
     {
         var fi = new FileInfo(zipPath);
+        string parentDirName = fi.Directory?.Name ?? "";
+
+        string sourceTag = "📁 Local";
+        if (parentDirName.Equals("multiplayer", StringComparison.OrdinalIgnoreCase) ||
+            fi.Name.Contains("BeamMP", StringComparison.OrdinalIgnoreCase))
+        {
+            sourceTag = "🌐 BeamMP";
+        }
+        else if (parentDirName.Equals("repo", StringComparison.OrdinalIgnoreCase))
+        {
+            sourceTag = "📦 Repo";
+        }
+
         var item = new ModItem
         {
             FileName = fi.Name,
             FullPath = fi.FullName,
             DisplayName = Path.GetFileNameWithoutExtension(fi.Name),
             SizeBytes = fi.Length,
+            SourceTag = sourceTag,
             IsEnabled = isEnabled
         };
 
         if (!fi.Extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
         {
-            item.Category = "📦 Архив";
+            item.Category = "⚠️ Не .ZIP";
+            item.InternalStructure = "Требуется перепаковка в .zip";
             return item;
         }
 
@@ -81,11 +107,18 @@ public class ModManagerService
         {
             using var archive = ZipFile.OpenRead(zipPath);
 
-            // АДДОН АВТО-КАТЕГОРИЗАЦИИ: определяем тип мода по внутренним папкам
             bool hasVehicles = false, hasLevels = false, hasLuaOrUi = false, hasSound = false;
+            var rootFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var entry in archive.Entries)
             {
                 string path = entry.FullName.Replace('\\', '/').TrimStart('/');
+                var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                if (segments.Length > 1)
+                    rootFolders.Add(segments[0] + "/" + segments[1]);
+                else if (segments.Length == 1)
+                    rootFolders.Add(segments[0]);
+
                 if (path.StartsWith("vehicles/", StringComparison.OrdinalIgnoreCase)) hasVehicles = true;
                 else if (path.StartsWith("levels/", StringComparison.OrdinalIgnoreCase)) hasLevels = true;
                 else if (path.StartsWith("art/sound/", StringComparison.OrdinalIgnoreCase)) hasSound = true;
@@ -94,13 +127,18 @@ public class ModManagerService
                          path.StartsWith("scripts/", StringComparison.OrdinalIgnoreCase)) hasLuaOrUi = true;
             }
 
-            if (hasLevels) item.Category = "🗺️ Карта";
+            if (sourceTag == "🌐 BeamMP" && fi.Name.Equals("BeamMP.zip", StringComparison.OrdinalIgnoreCase))
+                item.Category = "🌐 Клиент MP";
+            else if (hasLevels) item.Category = "🗺️ Карта";
             else if (hasVehicles) item.Category = "🚗 Авто";
             else if (hasSound) item.Category = "🔊 Звук";
             else if (hasLuaOrUi) item.Category = "⚙️ Скрипт";
             else item.Category = "📦 Мод";
 
-            // Парсинг info.json (из mod_info/, vehicles/* или levels/*)
+            item.InternalStructure = rootFolders.Count > 0
+                ? string.Join(", ", rootFolders.Take(6))
+                : "Корень архива";
+
             var infoEntries = archive.Entries
                 .Where(e => e.Name.Equals("info.json", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(e => e.FullName.StartsWith("mod_info/", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
@@ -146,7 +184,6 @@ public class ModManagerService
                 catch { }
             }
 
-            // Поиск превью-картинки
             var iconEntry = archive.Entries
                 .Where(e =>
                     (e.Name.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
@@ -167,7 +204,7 @@ public class ModManagerService
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.DecodePixelWidth = 64;
+                bitmap.DecodePixelWidth = 180; // Увеличенное разрешение для боковой карточки Инспектора
                 bitmap.StreamSource = ms;
                 bitmap.EndInit();
                 bitmap.Freeze();
@@ -207,7 +244,13 @@ public class ModManagerService
 
         if (mod.IsEnabled)
         {
-            string targetActivePath = Path.Combine(modsPath, mod.FileName);
+            // Если это мод BeamMP, возвращаем его именно в подпапку multiplayer
+            string targetSubFolder = mod.SourceTag == "🌐 BeamMP"
+                ? Path.Combine(modsPath, "multiplayer")
+                : modsPath;
+            Directory.CreateDirectory(targetSubFolder);
+
+            string targetActivePath = Path.Combine(targetSubFolder, mod.FileName);
             if (File.Exists(mod.FullPath) && !mod.FullPath.Equals(targetActivePath, StringComparison.OrdinalIgnoreCase))
             {
                 if (useHardlinks)
