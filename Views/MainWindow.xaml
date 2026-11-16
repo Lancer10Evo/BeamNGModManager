@@ -201,7 +201,7 @@
                       VerticalAlignment="Center" Checked="ChkHardlinks_Changed" Unchecked="ChkHardlinks_Changed"/>
         </Grid>
 
-        <!-- РЯД 3: Таблица модов + Переработанный Инспектор Мода -->
+        <!-- РЯД 3: Таблица модов + Инспектор Мода -->
         <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -243,9 +243,11 @@
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Border Width="50" Height="34" CornerRadius="6" Background="#2A2A35">
-                                        <Border.Background>
-                                            <ImageBrush ImageSource="{Binding PreviewImage}" Stretch="UniformToFill"/>
-                                        </Border.Background>
+                                        <Border CornerRadius="6">
+                                            <Border.Background>
+                                                <ImageBrush ImageSource="{Binding PreviewImage}" Stretch="UniformToFill"/>
+                                            </Border.Background>
+                                        </Border>
                                     </Border>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -270,7 +272,7 @@
                 </DataGrid>
             </Border>
 
-            <!-- НОВАЯ КАРТОЧКА ИНСПЕКТОРА МОДА (в стиле Steam / Modrinth) -->
+            <!-- КАРТОЧКА ИНСПЕКТОРА МОДА -->
             <Border Grid.Column="1" Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}"
                     BorderThickness="1" CornerRadius="12" Padding="14">
                 <Grid>
@@ -282,13 +284,15 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <!-- 1. HD-обложка с настоящими скруглёнными углами и плашкой версии поверх картинки -->
-                    <Border Grid.Row="0" Height="168" CornerRadius="10" BorderBrush="#343442" BorderThickness="1" Margin="0,0,0,12">
-                        <Border.Background>
-                            <ImageBrush x:Name="ImgInspectorBrush" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
-                        </Border.Background>
+                    <!-- 1. HD-обложка со скруглёнными углами -->
+                    <Border Grid.Row="0" Height="168" CornerRadius="10" Background="#141418" BorderBrush="#343442" BorderThickness="1" Margin="0,0,0,12">
                         <Grid>
-                            <!-- Тёмная виньетка снизу обложки -->
+                            <Border CornerRadius="10">
+                                <Border.Background>
+                                    <ImageBrush x:Name="ImgInspectorBrush" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                </Border.Background>
+                            </Border>
+
                             <Border CornerRadius="10">
                                 <Border.Background>
                                     <LinearGradientBrush StartPoint="0,0.4" EndPoint="0,1">
@@ -298,20 +302,18 @@
                                 </Border.Background>
                             </Border>
 
-                            <!-- Бейдж версии в правом верхнем углу обложки -->
                             <Border Background="#E6181820" BorderBrush="#FF6600" BorderThickness="1"
                                     CornerRadius="6" Padding="8,3" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8">
                                 <TextBlock x:Name="TxtInspectorVersionBadge" Text="v—" FontSize="11" FontWeight="Bold" Foreground="#FF8533"/>
                             </Border>
 
-                            <!-- Название мода прямо на нижней части обложки -->
                             <TextBlock x:Name="TxtInspectorTitle" Text="Выберите мод" FontSize="16" FontWeight="Bold"
                                        Foreground="White" VerticalAlignment="Bottom" Margin="12,0,12,10"
                                        TextTrimming="CharacterEllipsis"/>
                         </Grid>
                     </Border>
 
-                    <!-- 2. Ряд отдельных цветных бейджей (Категория + Источник + Статус) -->
+                    <!-- 2. Цветные бейджи -->
                     <WrapPanel Grid.Row="1" Margin="0,0,0,12">
                         <Border Background="#262633" BorderBrush="#3B3B4F" BorderThickness="1" CornerRadius="6" Padding="8,4" Margin="0,0,6,0">
                             <TextBlock x:Name="BadgeCategory" Text="🚗 Авто" FontSize="11" FontWeight="SemiBold" Foreground="White"/>
@@ -324,7 +326,7 @@
                         </Border>
                     </WrapPanel>
 
-                    <!-- 3. Плашки характеристик (Автор, ID в игре, Конфигурации .pc, Размер и Дата) -->
+                    <!-- 3. Плашки характеристик -->
                     <StackPanel Grid.Row="2">
                         <Border Background="#15151A" CornerRadius="8" Padding="10,7" Margin="0,0,0,6">
                             <Grid>
@@ -367,7 +369,7 @@
                         </Border>
                     </StackPanel>
 
-                    <!-- 4. Кнопки быстрых действий внизу карточки -->
+                    <!-- 4. Кнопки действий -->
                     <StackPanel Grid.Row="4" VerticalAlignment="Bottom">
                         <Button Content="📂 Показать в Проводнике" Style="{StaticResource ModernButton}"
                                 HorizontalAlignment="Stretch" Margin="0,0,0,6" Click="BtnRevealSelectedMod_Click"/>

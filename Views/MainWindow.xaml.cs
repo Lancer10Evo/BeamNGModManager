@@ -136,6 +136,8 @@ public partial class MainWindow : Window
             .ToList();
 
         GridMods.ItemsSource = filtered;
+        if (GridMods.SelectedItem == null && filtered.Count > 0)
+            GridMods.SelectedIndex = 0;
     }
 
     // --- Инспектор выбранного мода (правая панель) ---
@@ -174,6 +176,7 @@ public partial class MainWindow : Window
             Process.Start(new ProcessStartInfo(mod.FullPath) { UseShellExecute = true });
         }
     }
+
     // --- Избранное (★) ---
     private void BtnFavoriteMod_Click(object sender, RoutedEventArgs e)
     {
@@ -257,6 +260,7 @@ public partial class MainWindow : Window
         {
             _modManager.ToggleModState(mod, ActiveProfile.ModsPath, _pathResolver.Config.UseHardlinks);
             UpdateDashboardStats();
+            GridMods_SelectionChanged(GridMods, null!);
             ApplySearchAndFilter();
         }
     }
@@ -285,10 +289,6 @@ public partial class MainWindow : Window
         ApplySearchAndFilter();
     }
 
-    /// <summary>
-    /// Режим BeamMP: отключает все одиночные моды и включает только мультиплеерные моды (BeamMP.zip),
-    /// чтобы серверы BeamMP не кикали за сторонние модификации!
-    /// </summary>
     private void BtnBeamMpOnlyMode_Click(object sender, RoutedEventArgs e)
     {
         if (ActiveProfile == null) return;
@@ -323,7 +323,7 @@ public partial class MainWindow : Window
         }
     }
 
-    // --- Именные Loadouts (Сборки с самовосстановлением как в BMM) ---
+    // --- Именные Loadouts ---
     private void BtnSavePreset_Click(object sender, RoutedEventArgs e)
     {
         string customName = TxtPresetName.Text.Trim();
@@ -332,7 +332,6 @@ public partial class MainWindow : Window
 
         var enabledFiles = _allMods.Where(m => m.IsEnabled).Select(m => m.FileName).ToList();
 
-        // Если Loadout с таким именем уже есть — обновляем его
         var existing = _pathResolver.Config.Presets.FirstOrDefault(p => p.Name.Equals(customName, StringComparison.OrdinalIgnoreCase));
         if (existing != null)
         {
@@ -371,7 +370,6 @@ public partial class MainWindow : Window
         {
             TxtPresetName.Text = preset.Name;
 
-            // Self-Healing Loadout: очищаем из пресета моды, которые были удалены с диска
             var existingOnDisk = new HashSet<string>(_allMods.Select(m => m.FileName), StringComparer.OrdinalIgnoreCase);
             preset.EnabledModFiles.RemoveAll(f => !existingOnDisk.Contains(f));
             _pathResolver.SaveConfig();
@@ -391,7 +389,7 @@ public partial class MainWindow : Window
         }
     }
 
-    // --- Диагностика Лицензий, Здоровье и BeamMP ---
+    // --- Диагностика, Здоровье и BeamMP ---
     private void BtnTestLicense_Click(object sender, RoutedEventArgs e)
     {
         string report = _pathResolver.RunLicenseSimulatorTest();
