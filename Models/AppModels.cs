@@ -24,9 +24,6 @@ public class GameProfile
     public override string ToString() => $"{ShortTitle} ({ModsCount} мод.) — {ModsPath}";
 }
 
-/// <summary>
-/// Именной Loadout (Сборка модов как в BMM)
-/// </summary>
 public class ModPreset
 {
     public string Name { get; set; } = string.Empty;
@@ -57,7 +54,10 @@ public class ModItem : INotifyPropertyChanged
     public string Version { get; set; } = "—";
     public string Category { get; set; } = "📦 Мод";
     public string SourceTag { get; set; } = "📁 Local";
-    public string InternalStructure { get; set; } = "—";
+    public string GameId { get; set; } = "—";
+    public int ConfigsCount { get; set; }
+    public string ConfigsText => ConfigsCount > 0 ? $"{ConfigsCount} шт. (.pc)" : "Нет / Базовый";
+    public string InstallDate { get; set; } = "—";
     public long SizeBytes { get; set; }
     public string SizeFormatted => $"{SizeBytes / 1024.0 / 1024.0:F2} MB";
     public BitmapImage? PreviewImage { get; set; }

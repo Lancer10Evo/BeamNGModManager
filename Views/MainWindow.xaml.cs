@@ -143,11 +143,19 @@ public partial class MainWindow : Window
     {
         if (GridMods.SelectedItem is ModItem mod)
         {
-            ImgInspectorPreview.Source = mod.PreviewImage;
+            ImgInspectorBrush.ImageSource = mod.PreviewImage;
             TxtInspectorTitle.Text = mod.DisplayName;
-            TxtInspectorFile.Text = $"{mod.FileName} ({mod.SizeFormatted})";
-            TxtInspectorMeta.Text = $"{mod.Category}  •  {mod.SourceTag}  •  Автор: {mod.Author}";
-            TxtInspectorStructure.Text = mod.InternalStructure;
+            TxtInspectorVersionBadge.Text = mod.Version == "—" ? "v1.0" : $"v{mod.Version}";
+
+            BadgeCategory.Text = mod.Category;
+            BadgeSource.Text = mod.SourceTag;
+            BadgeStatus.Text = mod.IsEnabled ? "АКТИВЕН" : "ОТКЛЮЧЁН";
+
+            TxtInspectorAuthor.Text = mod.Author;
+            TxtInspectorGameId.Text = mod.GameId;
+            TxtInspectorConfigs.Text = mod.ConfigsText;
+            TxtInspectorSizeDate.Text = $"{mod.SizeFormatted} • {mod.InstallDate}";
+            TxtInspectorFile.Text = mod.FileName;
         }
     }
 
@@ -159,6 +167,13 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BtnOpenZipArchive_Click(object sender, RoutedEventArgs e)
+    {
+        if (GridMods.SelectedItem is ModItem mod && File.Exists(mod.FullPath))
+        {
+            Process.Start(new ProcessStartInfo(mod.FullPath) { UseShellExecute = true });
+        }
+    }
     // --- Избранное (★) ---
     private void BtnFavoriteMod_Click(object sender, RoutedEventArgs e)
     {
