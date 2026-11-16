@@ -2,14 +2,13 @@
 using System.IO.Compression;
 using BeamNGModManager.Models;
 using SharpCompress.Archives;
-using SharpCompress.Common;
 
 namespace BeamNGModManager.Services;
 
 public class SmartInstallerService
 {
     private const int MaxRecursionDepth = 3;
-    private const long MaxExtractedBytesLimit = 4L * 1024 * 1024 * 1024; // 4 GB защита от Zip-бомб
+    private const long MaxExtractedBytesLimit = 4L * 1024 * 1024 * 1024; // 4 GB лимит
 
     private static readonly HashSet<string> ValidBeamNgDirs = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -43,13 +42,11 @@ public class SmartInstallerService
 
     private bool ProcessSingleArchive(string archivePath, string targetModsDir, List<string> installedCollector, int currentDepth)
     {
-        // Защита от бесконечной рекурсии вложенных архивов
         if (currentDepth > MaxRecursionDepth)
             return false;
 
         string ext = Path.GetExtension(archivePath).ToLowerInvariant();
 
-        // Быстрый путь: если это уже чистый валидный .zip без вложенных архивов
         if (ext == ".zip" && IsCleanDirectZipMod(archivePath))
         {
             string destPath = GetUniqueDestinationPath(targetModsDir, Path.GetFileName(archivePath));
@@ -60,30 +57,39 @@ public class SmartInstallerService
 
         string tempDir = Path.Combine(Path.GetTempPath(), "BeamNGModMgr_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
+        string fullTempRoot = Path.GetFullPath(tempDir) + Path.DirectorySeparatorChar;
 
         try
         {
             long extractedBytes = 0;
 
-            using (var archive = ArchiveFactory.Open(archivePath))
+            using (var archive = ArchiveFactory.OpenArchive(archivePath))
             {
                 foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
                 {
+                    if (string.IsNullOrWhiteSpace(entry.Key)) continue;
+
                     extractedBytes += entry.Size;
                     if (extractedBytes > MaxExtractedBytesLimit)
                         throw new InvalidOperationException("Превышен безопасный лимит распаковки архива (4 ГБ).");
 
-                    entry.WriteToDirectory(tempDir, new ExtractionOptions
-                    {
-                        ExtractFullPath = true,
-                        Overwrite = true
-                    });
+                    // Строгая защита от Zip-Slip (Path Traversal CVE-2026-44788)
+                    string destFilePath = Path.GetFullPath(Path.Combine(tempDir, entry.Key));
+                    if (!destFilePath.StartsWith(fullTempRoot, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Заблокирована попытка выхода файла за пределы временной папки (Zip-Slip).");
+
+                    string? destDir = Path.GetDirectoryName(destFilePath);
+                    if (!string.IsNullOrEmpty(destDir))
+                        Directory.CreateDirectory(destDir);
+
+                    using var inStream = entry.OpenEntryStream();
+                    using var outStream = File.Create(destFilePath);
+                    inStream.CopyTo(outStream);
                 }
             }
 
             bool foundValidMod = false;
 
-            // 1. Обработка «матрёшек» с контролем глубины рекурсии (currentDepth + 1)
             var nestedZips = Directory.GetFiles(tempDir, "*.zip", SearchOption.AllDirectories);
             foreach (string nestedZip in nestedZips)
             {
@@ -104,7 +110,6 @@ public class SmartInstallerService
             if (foundValidMod)
                 return true;
 
-            // 2. Защита от кривой распаковки (упаковка сырых папок vehicles/, levels/, lua/, art/ в новый .zip)
             string? modRoot = FindBeamNgStructureRoot(tempDir);
             if (modRoot != null)
             {
@@ -206,16 +211,13 @@ public class SmartInstallerService
         foreach (string file in Directory.GetFiles(dirPath, "*.*", SearchOption.TopDirectoryOnly))
         {
             string ext = Path.GetExtension(file).ToLowerInvariant();
-            if (ext is ".url" or ".html" or ".htm" or ".lnk")
+            if (ext is ".url" or ".html" or ".htm" or ".lnk" or ".exe" or ".bat" or ".cmd" or ".ps1")
             {
                 try { File.Delete(file); } catch { }
             }
         }
     }
 
-    /// <summary>
-    /// Гарантирует 100% уникальное имя файла без перезаписи существующих активных или отключённых модов
-    /// </summary>
     private string GetUniqueDestinationPath(string targetModsDir, string fileName)
     {
         string cleanName = string.Join("_", fileName.Split(Path.GetInvalidFileNameChars()));

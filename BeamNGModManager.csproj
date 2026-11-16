@@ -6,11 +6,10 @@
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
-		<Version>2.0.0</Version>
+		<Version>2.1.0</Version>
 		<AssemblyName>BeamNGModManager</AssemblyName>
 
 		<ApplicationIcon>icon.ico</ApplicationIcon>
-		<NoWarn>NU1902</NoWarn>
 
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<SelfContained>true</SelfContained>
@@ -21,8 +20,8 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="SharpCompress" Version="0.38.0" />
-		<!-- Движок для встроенного Мод-Хаба (BeamNG.com, ModLand, PlayGround, Nexus) -->
+		<!-- Обновлено до 0.48.0+ (устранена уязвимость GHSA-6c8g-7p36-r338 без NoWarn!) -->
+		<PackageReference Include="SharpCompress" Version="0.48.0" />
 		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
 	</ItemGroup>
 
