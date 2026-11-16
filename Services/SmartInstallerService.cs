@@ -8,7 +8,9 @@ namespace BeamNGModManager.Services;
 
 public class SmartInstallerService
 {
-    // Список системных директорий BeamNG.drive для валидации структуры мода
+    private const int MaxRecursionDepth = 3;
+    private const long MaxExtractedBytesLimit = 4L * 1024 * 1024 * 1024; // 4 GB защита от Zip-бомб
+
     private static readonly HashSet<string> ValidBeamNgDirs = new(StringComparer.OrdinalIgnoreCase)
     {
         "vehicles", "levels", "lua", "art", "mod_info", "scripts", "ui", "core", "gameplay", "campaigns"
@@ -26,7 +28,7 @@ public class SmartInstallerService
                 if (!File.Exists(path)) continue;
                 try
                 {
-                    bool installedAny = ProcessSingleArchive(path, targetModsDir, result.InstalledFiles);
+                    bool installedAny = ProcessSingleArchive(path, targetModsDir, result.InstalledFiles, currentDepth: 0);
                     if (!installedAny)
                         result.InvalidFiles.Add(Path.GetFileName(path));
                 }
@@ -39,29 +41,38 @@ public class SmartInstallerService
         });
     }
 
-    private bool ProcessSingleArchive(string archivePath, string targetModsDir, List<string> installedCollector)
+    private bool ProcessSingleArchive(string archivePath, string targetModsDir, List<string> installedCollector, int currentDepth)
     {
+        // Защита от бесконечной рекурсии вложенных архивов
+        if (currentDepth > MaxRecursionDepth)
+            return false;
+
         string ext = Path.GetExtension(archivePath).ToLowerInvariant();
 
-        // БЫСТРЫЙ ПУТЬ: если это уже корректный .zip мод без вложенных архивов-матрёшек
+        // Быстрый путь: если это уже чистый валидный .zip без вложенных архивов
         if (ext == ".zip" && IsCleanDirectZipMod(archivePath))
         {
             string destPath = GetUniqueDestinationPath(targetModsDir, Path.GetFileName(archivePath));
-            File.Copy(archivePath, destPath, overwrite: true);
+            File.Copy(archivePath, destPath, overwrite: false);
             installedCollector.Add(Path.GetFileName(destPath));
             return true;
         }
 
-        // Распаковка в %TEMP% для анализа "матрёшек" (.rar/.7z/.zip с рекламой) или кривой структуры
         string tempDir = Path.Combine(Path.GetTempPath(), "BeamNGModMgr_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
 
         try
         {
+            long extractedBytes = 0;
+
             using (var archive = ArchiveFactory.Open(archivePath))
             {
                 foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
                 {
+                    extractedBytes += entry.Size;
+                    if (extractedBytes > MaxExtractedBytesLimit)
+                        throw new InvalidOperationException("Превышен безопасный лимит распаковки архива (4 ГБ).");
+
                     entry.WriteToDirectory(tempDir, new ExtractionOptions
                     {
                         ExtractFullPath = true,
@@ -72,21 +83,20 @@ public class SmartInstallerService
 
             bool foundValidMod = false;
 
-            // 1. ОБРАБОТКА «МАТРЁШЕК»: ищем целевые .zip архивы внутри распакованной папки
+            // 1. Обработка «матрёшек» с контролем глубины рекурсии (currentDepth + 1)
             var nestedZips = Directory.GetFiles(tempDir, "*.zip", SearchOption.AllDirectories);
             foreach (string nestedZip in nestedZips)
             {
                 if (ValidateZipFile(nestedZip))
                 {
                     string dest = GetUniqueDestinationPath(targetModsDir, Path.GetFileName(nestedZip));
-                    File.Copy(nestedZip, dest, overwrite: true);
+                    File.Copy(nestedZip, dest, overwrite: false);
                     installedCollector.Add(Path.GetFileName(dest));
                     foundValidMod = true;
                 }
                 else
                 {
-                    // Если вложенный .zip сам запакован криво (например, с лишней папкой-обёрткой)
-                    if (ProcessSingleArchive(nestedZip, targetModsDir, installedCollector))
+                    if (ProcessSingleArchive(nestedZip, targetModsDir, installedCollector, currentDepth + 1))
                         foundValidMod = true;
                 }
             }
@@ -94,12 +104,10 @@ public class SmartInstallerService
             if (foundValidMod)
                 return true;
 
-            // 2. ЗАЩИТА ОТ КРИВОЙ РАСПАКОВКИ: внутри сразу лежат папки vehicles/, levels/, lua/, art/
-            // (или они обёрнуты в лишнюю папку вида MyCarMod_v1/vehicles/...)
+            // 2. Защита от кривой распаковки (упаковка сырых папок vehicles/, levels/, lua/, art/ в новый .zip)
             string? modRoot = FindBeamNgStructureRoot(tempDir);
             if (modRoot != null)
             {
-                // Очищаем рекламный мусор сайтов (.url, .html, .lnk) перед упаковкой
                 CleanAdFiles(modRoot);
 
                 string zipName = Path.GetFileNameWithoutExtension(archivePath) + ".zip";
@@ -114,7 +122,6 @@ public class SmartInstallerService
         }
         finally
         {
-            // Гарантированная очистка временной папки в %TEMP%
             if (Directory.Exists(tempDir))
             {
                 try { Directory.Delete(tempDir, recursive: true); } catch { }
@@ -122,9 +129,6 @@ public class SmartInstallerService
         }
     }
 
-    /// <summary>
-    /// Проверяет, является ли .zip готовым валидным модом без вложенных архивов
-    /// </summary>
     private bool IsCleanDirectZipMod(string zipPath)
     {
         try
@@ -157,9 +161,6 @@ public class SmartInstallerService
         }
     }
 
-    /// <summary>
-    /// Валидация .zip архива на наличие хотя бы одной системной папки BeamNG
-    /// </summary>
     public bool ValidateZipFile(string zipPath)
     {
         try
@@ -179,9 +180,6 @@ public class SmartInstallerService
         }
     }
 
-    /// <summary>
-    /// Ищет папку, в которой находятся системные директории BeamNG (в корне или внутри обёртки)
-    /// </summary>
     private string? FindBeamNgStructureRoot(string extractedRoot)
     {
         if (HasBeamNgSystemFolders(extractedRoot))
@@ -215,9 +213,31 @@ public class SmartInstallerService
         }
     }
 
-    private string GetUniqueDestinationPath(string dir, string fileName)
+    /// <summary>
+    /// Гарантирует 100% уникальное имя файла без перезаписи существующих активных или отключённых модов
+    /// </summary>
+    private string GetUniqueDestinationPath(string targetModsDir, string fileName)
     {
         string cleanName = string.Join("_", fileName.Split(Path.GetInvalidFileNameChars()));
-        return Path.Combine(dir, cleanName);
+        if (string.IsNullOrWhiteSpace(cleanName))
+            cleanName = "mod_" + Guid.NewGuid().ToString("N")[..6] + ".zip";
+
+        string baseName = Path.GetFileNameWithoutExtension(cleanName);
+        string ext = Path.GetExtension(cleanName);
+        string disabledDir = Path.Combine(targetModsDir, "_disabled");
+
+        string candidatePath = Path.Combine(targetModsDir, cleanName);
+        string disabledCandidate = Path.Combine(disabledDir, cleanName);
+
+        int counter = 1;
+        while (File.Exists(candidatePath) || File.Exists(disabledCandidate))
+        {
+            string numberedName = $"{baseName} ({counter}){ext}";
+            candidatePath = Path.Combine(targetModsDir, numberedName);
+            disabledCandidate = Path.Combine(disabledDir, numberedName);
+            counter++;
+        }
+
+        return candidatePath;
     }
 }

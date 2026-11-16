@@ -247,8 +247,14 @@ public class ModManagerService
         return false;
     }
 
+    /// <summary>
+    /// Безопасное переключение состояния мода с защитой от перезаписи и проверкой целостности Hardlinks
+    /// </summary>
     public void ToggleModState(ModItem mod, string modsPath, bool useHardlinks)
     {
+        if (!File.Exists(mod.FullPath))
+            return;
+
         string disabledDir = Path.Combine(modsPath, "_disabled");
         Directory.CreateDirectory(disabledDir);
 
@@ -264,36 +270,90 @@ public class ModManagerService
             Directory.CreateDirectory(targetSubFolder);
 
             string targetActivePath = Path.Combine(targetSubFolder, mod.FileName);
-            if (File.Exists(mod.FullPath) && !mod.FullPath.Equals(targetActivePath, StringComparison.OrdinalIgnoreCase))
+            if (mod.FullPath.Equals(targetActivePath, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            // Защита от затирания другого файла с таким же именем в активной папке
+            if (File.Exists(targetActivePath))
             {
-                if (useHardlinks)
+                var srcInfo = new FileInfo(mod.FullPath);
+                var dstInfo = new FileInfo(targetActivePath);
+
+                // Если в папке уже лежит другой мод с тем же именем (отличается размер) — генерируем безопасное имя
+                if (srcInfo.Length != dstInfo.Length)
                 {
-                    if (!CreateHardLink(targetActivePath, mod.FullPath, IntPtr.Zero))
-                    {
-                        try { File.CreateSymbolicLink(targetActivePath, mod.FullPath); }
-                        catch { File.Move(mod.FullPath, targetActivePath, overwrite: true); }
-                    }
+                    targetActivePath = GetSafeCollisionPath(targetSubFolder, mod.FileName);
+                    mod.FileName = Path.GetFileName(targetActivePath);
                 }
                 else
                 {
-                    File.Move(mod.FullPath, targetActivePath, overwrite: true);
+                    // Если это уже существующая жёсткая ссылка на тот же мод
+                    if (!useHardlinks)
+                        File.Delete(mod.FullPath);
+                    mod.FullPath = targetActivePath;
+                    return;
                 }
-                mod.FullPath = targetActivePath;
             }
+
+            if (useHardlinks)
+            {
+                bool linked = CreateHardLink(targetActivePath, mod.FullPath, IntPtr.Zero);
+                if (!linked)
+                {
+                    try { File.CreateSymbolicLink(targetActivePath, mod.FullPath); linked = true; }
+                    catch { linked = false; }
+                }
+
+                if (!linked)
+                    File.Move(mod.FullPath, targetActivePath, overwrite: false);
+            }
+            else
+            {
+                File.Move(mod.FullPath, targetActivePath, overwrite: false);
+            }
+
+            mod.FullPath = targetActivePath;
         }
         else
         {
             string targetDisabledPath = Path.Combine(disabledDir, mod.FileName);
-            if (File.Exists(mod.FullPath))
-            {
-                if (useHardlinks && File.Exists(targetDisabledPath))
-                    File.Delete(mod.FullPath);
-                else
-                    File.Move(mod.FullPath, targetDisabledPath, overwrite: true);
+            if (mod.FullPath.Equals(targetDisabledPath, StringComparison.OrdinalIgnoreCase))
+                return;
 
-                mod.FullPath = targetDisabledPath;
+            if (File.Exists(targetDisabledPath))
+            {
+                var activeInfo = new FileInfo(mod.FullPath);
+                var disabledInfo = new FileInfo(targetDisabledPath);
+
+                // Удаляем активную ссылку ТОЛЬКО если в _disabled лежит валидная копия точно такого же размера (>0 байт)
+                if (disabledInfo.Length > 0 && disabledInfo.Length == activeInfo.Length)
+                {
+                    File.Delete(mod.FullPath);
+                    mod.FullPath = targetDisabledPath;
+                    return;
+                }
+
+                targetDisabledPath = GetSafeCollisionPath(disabledDir, mod.FileName);
+                mod.FileName = Path.GetFileName(targetDisabledPath);
             }
+
+            File.Move(mod.FullPath, targetDisabledPath, overwrite: false);
+            mod.FullPath = targetDisabledPath;
         }
+    }
+
+    private static string GetSafeCollisionPath(string folder, string fileName)
+    {
+        string baseName = Path.GetFileNameWithoutExtension(fileName);
+        string ext = Path.GetExtension(fileName);
+        string candidate = Path.Combine(folder, fileName);
+        int i = 1;
+        while (File.Exists(candidate))
+        {
+            candidate = Path.Combine(folder, $"{baseName} ({i}){ext}");
+            i++;
+        }
+        return candidate;
     }
 
     public void DeleteMod(ModItem mod, string modsPath)

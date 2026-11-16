@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using BeamNGModManager.Models;
 
 namespace BeamNGModManager.Services;
@@ -42,9 +43,6 @@ public class MaintenanceService
         return deletedFilesCount;
     }
 
-    /// <summary>
-    /// Очистка скачанных модов серверов BeamMP (из папки mods\multiplayer\), сохраняя сам клиент BeamMP.zip
-    /// </summary>
     public (int removedCount, double freedMb) CleanBeamMpServerCache(string modsPath)
     {
         string mpDir = Path.Combine(modsPath, "multiplayer");
@@ -57,7 +55,6 @@ public class MaintenanceService
         foreach (string file in Directory.GetFiles(mpDir, "*.*", SearchOption.AllDirectories))
         {
             string fileName = Path.GetFileName(file);
-            // Никогда не удаляем сам клиентский мод BeamMP.zip!
             if (fileName.Equals("BeamMP.zip", StringComparison.OrdinalIgnoreCase))
                 continue;
 
@@ -75,7 +72,10 @@ public class MaintenanceService
     }
 
     /// <summary>
-    /// Health Center (как в Mod Manager Pro и BMM): поиск дубликатов, битых архивов и не-ZIP файлов
+    /// Углублённый Health Center:
+    /// 1. Настоящая проверка целостности структуры .ZIP архивов (Central Directory + чтение заголовка потока).
+    /// 2. Поиск 100% побайтовых дубликатов по хэшу SHA-256.
+    /// 3. Поиск семантических дубликатов (одинаковый GameId машины/карты в разных архивах).
     /// </summary>
     public async Task<string> RunHealthCheckAsync(IEnumerable<ModItem> allMods, string modsPath)
     {
@@ -83,14 +83,38 @@ public class MaintenanceService
         {
             var mods = allMods.ToList();
             var nonZipMods = mods.Where(m => !m.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)).ToList();
-            var zeroByteMods = mods.Where(m => m.SizeBytes == 0).ToList();
+            var corruptedZips = new List<string>();
 
-            // Поиск дубликатов по совпадению отображаемого названия или точного размера в байтах (>100 КБ)
-            var duplicateGroups = mods
-                .Where(m => m.SizeBytes > 100_000)
+            // 1. Проверка целостности ZIP-архивов
+            foreach (var mod in mods.Where(m => m.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (mod.SizeBytes == 0 || !VerifyZipIntegrity(mod.FullPath))
+                    corruptedZips.Add(mod.FileName);
+            }
+
+            // 2. Поиск точных дубликатов по содержимому (SHA-256 хэш для файлов одинакового размера)
+            var exactDuplicates = new List<string>();
+            var sameSizeGroups = mods
+                .Where(m => m.SizeBytes > 0 && File.Exists(m.FullPath))
                 .GroupBy(m => m.SizeBytes)
+                .Where(g => g.Count() > 1);
+
+            foreach (var sizeGroup in sameSizeGroups)
+            {
+                var hashGroups = sizeGroup
+                    .GroupBy(m => ComputeSha256(m.FullPath))
+                    .Where(hg => !string.IsNullOrEmpty(hg.Key) && hg.Count() > 1);
+
+                foreach (var hg in hashGroups)
+                    exactDuplicates.Add(string.Join(" == ", hg.Select(x => x.FileName)));
+            }
+
+            // 3. Поиск семантических дубликатов (два разных архива с одной и той же уникальной папкой машины/карты)
+            var semanticDuplicates = mods
+                .Where(m => m.GameId != "—" && m.GameId != "Системный / Скрипт" && !m.GameId.Contains(','))
+                .GroupBy(m => m.GameId, StringComparer.OrdinalIgnoreCase)
                 .Where(g => g.Count() > 1)
-                .Select(g => string.Join(" == ", g.Select(x => x.FileName)))
+                .Select(g => $"{g.Key}: ({string.Join(", ", g.Select(x => x.FileName))})")
                 .ToList();
 
             string mpDir = Path.Combine(modsPath, "multiplayer");
@@ -106,17 +130,57 @@ public class MaintenanceService
                 serverModsMb = serverFiles.Sum(f => f.Length) / 1024.0 / 1024.0;
             }
 
-            return $"🩺 ОТЧЁТ ЦЕНТРА ЗДОРОВЬЯ (Health Center):\n\n" +
-                   $"• Всего проверено модов: {mods.Count}\n" +
-                   $"• Дубликаты модов (одинаковый вес): {(duplicateGroups.Count == 0 ? "✅ Не найдено" : $"⚠️ Найдено ({duplicateGroups.Count}):\n   " + string.Join("\n   ", duplicateGroups.Take(5)))}\n\n" +
-                   $"• Архивы не в формате .ZIP (.rar/.7z в папке mods): {(nonZipMods.Count == 0 ? "✅ Нет" : $"⚠️ {nonZipMods.Count} шт. ({string.Join(", ", nonZipMods.Select(x => x.FileName))})")}\n" +
-                   $"• Повреждённые (пустые) файлы: {(zeroByteMods.Count == 0 ? "✅ Нет" : $"❌ {zeroByteMods.Count} шт.")}\n\n" +
-                   $"🌐 Кэш серверов BeamMP (mods\\multiplayer):\n" +
-                   $"• Чужих серверных модов: {serverModsCount} шт. ({serverModsMb:F1} MB)\n" +
-                   $"  (Вы можете очистить их кнопкой «🌐 Кэш MP», сохранив клиент BeamMP.zip)";
+            return $"🩺 ОТЧЁТ ЦЕНТРА ЗДОРОВЬЯ (Health Center v1.4):\n\n" +
+                   $"• Проверено архивов: {mods.Count}\n" +
+                   $"• Проверка целостности ZIP: {(corruptedZips.Count == 0 ? "✅ Все архивы целые" : $"❌ Повреждены ({corruptedZips.Count}): {string.Join(", ", corruptedZips)}")}\n" +
+                   $"• Побайтовые дубликаты (SHA-256): {(exactDuplicates.Count == 0 ? "✅ Не найдено" : $"⚠️ Найдено ({exactDuplicates.Count}):\n   " + string.Join("\n   ", exactDuplicates.Take(5)))}\n" +
+                   $"• Повторы одной модели/карты: {(semanticDuplicates.Count == 0 ? "✅ Нет" : $"ℹ️ {semanticDuplicates.Count} шт.:\n   " + string.Join("\n   ", semanticDuplicates.Take(4)))}\n" +
+                   $"• Архивы не в формате .ZIP: {(nonZipMods.Count == 0 ? "✅ Нет" : $"⚠️ {nonZipMods.Count} шт.")}\n\n" +
+                   $"🌐 Кэш серверов BeamMP: {serverModsCount} мод. ({serverModsMb:F1} MB)";
         });
     }
 
+    private static bool VerifyZipIntegrity(string zipPath)
+    {
+        try
+        {
+            using var archive = ZipFile.OpenRead(zipPath);
+            if (archive.Entries.Count == 0)
+                return false;
+
+            // Пробуем открыть поток первого непустого файла, чтобы убедиться, что заголовок не битый
+            var firstFile = archive.Entries.FirstOrDefault(e => e.Length > 0);
+            if (firstFile != null)
+            {
+                using var stream = firstFile.Open();
+                Span<byte> buffer = stackalloc byte[1];
+                _ = stream.Read(buffer);
+            }
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string ComputeSha256(string filePath)
+    {
+        try
+        {
+            using var stream = File.OpenRead(filePath);
+            byte[] hash = SHA256.HashData(stream);
+            return Convert.ToHexString(hash);
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Умный анализатор конфликтов с разделением на Критические (JBeam/Lua/PC) и Мягкие переопределения (Текстуры/Ресурсы)
+    /// </summary>
     public async Task<Dictionary<string, List<string>>> DetectConflictsAsync(IEnumerable<ModItem> activeMods)
     {
         return await Task.Run(() =>
@@ -155,10 +219,26 @@ public class MaintenanceService
                 catch { }
             }
 
-            return fileToModsMap
+            // Помечаем уровень серьёзности конфликта (🔴 КРИТИЧЕСКИЙ для физики/скриптов vs 🟡 РЕСУРС для текстур)
+            var result = new Dictionary<string, List<string>>();
+            var overlaps = fileToModsMap
                 .Where(kv => kv.Value.Count > 1)
-                .ToDictionary(kv => kv.Key, kv => kv.Value);
+                .OrderByDescending(kv => IsCriticalConflictFile(kv.Key));
+
+            foreach (var kv in overlaps)
+            {
+                string prefix = IsCriticalConflictFile(kv.Key) ? "🔴 [КРИТИЧНО: Физика/Код] " : "🟡 [Ресурс/Текстура] ";
+                result[prefix + kv.Key] = kv.Value;
+            }
+
+            return result;
         });
+    }
+
+    private static bool IsCriticalConflictFile(string virtualPath)
+    {
+        string ext = Path.GetExtension(virtualPath).ToLowerInvariant();
+        return ext is ".jbeam" or ".lua" or ".pc" or ".cs";
     }
 
     public bool LaunchGame(GameProfile profile)
@@ -187,9 +267,6 @@ public class MaintenanceService
         return true;
     }
 
-    /// <summary>
-    /// Автопоиск и запуск лаунчера мультиплеера BeamMP-Launcher.exe
-    /// </summary>
     public bool LaunchBeamMp(string? savedBeamMpPath, out string resolvedPath)
     {
         resolvedPath = string.Empty;
