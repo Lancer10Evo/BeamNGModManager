@@ -13,6 +13,7 @@ public partial class MainWindow : Window
     private readonly LocalizationService _loc = new();
     private readonly PathResolverService _pathResolver = new();
     private readonly SmartInstallerService _installer = new();
+    private readonly SecurityScannerService _securityScanner = new();
     private readonly ModManagerService _modManager = new();
     private readonly MaintenanceService _maintenance = new();
     private readonly UpdateService _updater = new();
@@ -197,7 +198,7 @@ public partial class MainWindow : Window
         }
     }
 
-    // --- Установка модов и Мод-Хаб 2.0 ---
+    // --- Установка модов (Файл с ПК, Drag-and-Drop и Мод-Хаб 2.2) ---
     private async void BtnInstallMods_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new OpenFileDialog
@@ -243,12 +244,64 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Единая защищённая точка установки для кнопки «＋ Файл с ПК» и перетаскивания Drag-and-Drop:
+    /// каждый архив сначала проходит антивирусную и Lua-проверку с подтверждением пользователя.
+    /// </summary>
     private async Task RunSmartInstallAsync(IEnumerable<string> files)
     {
         if (ActiveProfile == null) return;
-        LblStatus.Text = _loc.Get("installing_status");
+        var verifiedFiles = new List<string>();
 
-        var result = await _installer.InstallArchivesAsync(files, ActiveProfile.ModsPath);
+        foreach (string filePath in files)
+        {
+            if (!File.Exists(filePath)) continue;
+            string name = Path.GetFileName(filePath);
+            LblStatus.Text = $"🛡️ Проверка антивирусом и рекурсивный аудит Lua: {name}...";
+
+            var report = await _securityScanner.ScanArchiveAsync(filePath, null);
+            string dialogText = report.BuildFormattedSummary() +
+                                "\n\nНажмите:\n" +
+                                "• «Да» — Установить этот мод\n" +
+                                "• «Нет» — Открыть страницу хеша этого файла на VirusTotal\n" +
+                                "• «Отмена» — Пропустить и не устанавливать";
+
+            string dialogTitle = report.Verdict switch
+            {
+                ScanVerdict.VerifiedSafe => "✅ Подтверждение установки (Проверено)",
+                ScanVerdict.UnverifiedWarning => "⚠️ ВНИМАНИЕ: Статус не подтверждён антивирусом",
+                _ => "🚨 КРИТИЧЕСКАЯ УГРОЗА БЕЗОПАСНОСТИ"
+            };
+
+            var choice = MessageBox.Show(
+                dialogText,
+                dialogTitle,
+                MessageBoxButton.YesNoCancel,
+                report.Verdict == ScanVerdict.VerifiedSafe ? MessageBoxImage.Information : MessageBoxImage.Warning);
+
+            if (choice == MessageBoxResult.No)
+            {
+                Process.Start(new ProcessStartInfo(report.VirusTotalUrl) { UseShellExecute = true });
+                if (MessageBox.Show($"Установить мод «{name}» после проверки VirusTotal?", Title,
+                    MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                {
+                    verifiedFiles.Add(filePath);
+                }
+            }
+            else if (choice == MessageBoxResult.Yes)
+            {
+                verifiedFiles.Add(filePath);
+            }
+        }
+
+        if (verifiedFiles.Count == 0)
+        {
+            LblStatus.Text = _loc.Get("drag_drop_hint");
+            return;
+        }
+
+        LblStatus.Text = _loc.Get("installing_status");
+        var result = await _installer.InstallArchivesAsync(verifiedFiles, ActiveProfile.ModsPath);
         await ReloadModsListAsync();
 
         LblStatus.Text = _loc.Get("drag_drop_hint");
