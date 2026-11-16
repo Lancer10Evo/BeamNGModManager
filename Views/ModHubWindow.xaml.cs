@@ -15,7 +15,7 @@ public partial class ModHubWindow : Window
     private readonly string _targetModsDir;
     private readonly Func<Task> _onModInstalledCallback;
 
-    // 1. Основные порталы, которые разрешено открывать в браузере и вводить в адресную строку
+    // 1. Основные порталы модов
     private static readonly string[] AllowedBrowsingPortals =
     {
         "beamng.com",
@@ -25,21 +25,26 @@ public partial class ModHubWindow : Window
         "nexus-cdn.com"
     };
 
-    // 2. Файловые зеркала и CDN, разрешённые для переходов к скачиванию архивов
+    // 2. Облачные хранилища и файловые CDN (включая Cloudflare R2, S3, зеркала PlayGround и ModLand)
     private static readonly string[] AllowedDownloadCdns =
     {
+        "cloudflarestorage.com",
+        "cloudflare.com",
         "modsfire.com",
         "sharemods.com",
         "modsbase.com",
         "modsup.com",
-        "cloudflarestorage.com",
-        "cloudflare.com",
         "amazonaws.com",
         "b-cdn.net",
         "digitaloceanspaces.com",
         "mediafire.com",
         "drive.google.com",
-        "googleusercontent.com"
+        "googleusercontent.com",
+        "workupload.com",
+        "mega.nz",
+        "yandex.net",
+        "yandex.ru",
+        "mail.ru"
     };
 
     public ModHubWindow(SmartInstallerService installer, string targetModsDir, Func<Task> onModInstalledCallback)
@@ -104,7 +109,18 @@ public partial class ModHubWindow : Window
 
     private static bool IsUriAllowed(Uri uri)
     {
-        return IsPortalDomain(uri.Host) || IsCdnDomain(uri.Host);
+        if (IsPortalDomain(uri.Host) || IsCdnDomain(uri.Host))
+            return true;
+
+        // Пропускаем прямые облачные редиректы на скачивание архивов (.zip/.rar/.7z и S3/Cloudflare R2 подписи)
+        string pq = uri.PathAndQuery.ToLowerInvariant();
+        if (pq.Contains(".zip") || pq.Contains(".rar") || pq.Contains(".7z") ||
+            pq.Contains("x-amz-") || pq.Contains("content-disposition"))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private void CoreWebView2_DownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
@@ -336,7 +352,6 @@ public partial class ModHubWindow : Window
             using var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
 
-            // Проверяем финальный хост после всех HTTP 301/302 редиректов!
             Uri finalUri = response.RequestMessage?.RequestUri ?? uri;
             if (!IsUriAllowed(finalUri))
             {
