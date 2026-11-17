@@ -11,7 +11,7 @@
 
     <Authors>Lancer10Evo</Authors>
     <Company>Lancer10Evo</Company>
-    <Product>BeamNG.drive Mod Manager Pro</Product>
+    <Product>BeamModManager Ultimate</Product>
     <Copyright>Copyright © 2026 Lancer10Evo. All Rights Reserved. Non-Commercial Use Only.</Copyright>
 
     <ApplicationIcon>icon.ico</ApplicationIcon>
@@ -36,3 +36,4 @@
   </ItemGroup>
 
 </Project>
+

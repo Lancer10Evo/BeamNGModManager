@@ -1,7 +1,7 @@
 ﻿<Window x:Class="BeamNGModManager.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="BeamNG.drive Mod Manager" Height="840" Width="1380"
+        Title="BeamModManager Ultimate" Height="840" Width="1380"
         MinHeight="700" MinWidth="1120"
         Icon="pack://application:,,,/icon.ico"
         Background="{StaticResource BgDark}" Foreground="{StaticResource TextPrimary}"
@@ -37,8 +37,8 @@
                     <Image Source="pack://application:,,,/icon.ico" Width="34" Height="34"
                            VerticalAlignment="Center" Margin="0,0,10,0" RenderOptions.BitmapScalingMode="HighQuality"/>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="BeamNG &amp; BeamMP" FontWeight="Bold" FontSize="15" Foreground="{StaticResource TextPrimary}"/>
-                        <TextBlock Text="MOD MANAGER PRO v2.7" FontWeight="Bold" FontSize="10" Foreground="{StaticResource AccentOrange}"/>
+                        <TextBlock Text="BeamModManager" FontWeight="Bold" FontSize="15" Foreground="{StaticResource TextPrimary}"/>
+                        <TextBlock Text="ULTIMATE v2.7" FontWeight="Bold" FontSize="10" Foreground="{StaticResource AccentOrange}"/>
                     </StackPanel>
                 </StackPanel>
 
@@ -429,3 +429,4 @@
         </Border>
     </Grid>
 </Window>
+

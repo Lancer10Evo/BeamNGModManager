@@ -1,5 +1,5 @@
 ﻿<h1 align="center">
-  BeamNG.drive Mod Manager Pro — Technical Documentation and Operating Manual
+  BeamModManager Ultimate — Technical Documentation and Operating Manual
 </h1>
 
 <hr />
@@ -43,7 +43,7 @@
 <h2 id="english-default">English (Default)</h2>
 
 ### 1. System Overview
-**BeamNG.drive Mod Manager Pro** is a standalone desktop utility for Windows 10 and Windows 11 (x64) designed for automated path resolution, archive validation, security auditing, and profile management for **BeamNG.drive** and **BeamMP**. The software is distributed as a self-contained single-file executable requiring no external runtime installation.
+**BeamModManager Ultimate** is a standalone desktop utility for Windows 10 and Windows 11 (x64) designed for automated path resolution, archive validation, security auditing, and profile management for **BeamNG.drive** and **BeamMP**. The software is distributed as a self-contained single-file executable requiring no external runtime installation.
 
 ### 2. Core Functional Architecture
 1. **Path Resolution Engine:** Resolves the game root and user data directory (`UserPath`) according to a strict priority hierarchy:
@@ -91,7 +91,7 @@ The source code is published strictly for inspection and security verification (
 <summary><b>Техническая документация и инструкция по эксплуатации (Русский)</b></summary>
 
 ### 1. Назначение программы
-**BeamNG.drive Mod Manager Pro** — автономная десктопная утилита для ОС Windows 10 и Windows 11 (x64), предназначенная для автоматического определения путей, валидации архивов, контроля безопасности и управления модификациями для **BeamNG.drive** и **BeamMP**. Поставляется в формате единого самодостаточного исполняемого файла `.exe`, не требующего установки внешних сред выполнения.
+**BeamModManager Ultimate** — автономная десктопная утилита для ОС Windows 10 и Windows 11 (x64), предназначенная для автоматического определения путей, валидации архивов, контроля безопасности и управления модификациями для **BeamNG.drive** и **BeamMP**. Поставляется в формате единого самодостаточного исполняемого файла `.exe`, не требующего установки внешних сред выполнения.
 
 ### 2. Порядок работы (Инструкция по эксплуатации)
 1. **Запуск:** Скачайте файл `BeamNGModManager.exe` из раздела **[Releases](https://github.com/Lancer10Evo/BeamNGModManager/releases/latest)** и запустите его.
@@ -112,7 +112,7 @@ Copyright © 2026 **Lancer10Evo**. Все права защищены. Исхо�
 <summary><b>Technische Dokumentation und Bedienungsanleitung (Deutsch)</b></summary>
 
 ### 1. Systemübersicht
-**BeamNG.drive Mod Manager Pro** ist ein eigenständiges Desktop-Dienstprogramm für Windows 10 und Windows 11 (x64) zur automatischen Pfaderkennung, Archivvalidierung, Sicherheitsprüfung und Profilverwaltung für **BeamNG.drive** und **BeamMP**. Die Bereitstellung erfolgt als einzelne, portable `.exe`-Datei ohne externe Laufzeitabhängigkeiten.
+**BeamModManager Ultimate** ist ein eigenständiges Desktop-Dienstprogramm für Windows 10 und Windows 11 (x64) zur automatischen Pfaderkennung, Archivvalidierung, Sicherheitsprüfung und Profilverwaltung für **BeamNG.drive** und **BeamMP**. Die Bereitstellung erfolgt als einzelne, portable `.exe`-Datei ohne externe Laufzeitabhängigkeiten.
 
 ### 2. Bedienungsanleitung
 1. **Programmstart:** Laden Sie `BeamNGModManager.exe` im Bereich **[Releases](https://github.com/Lancer10Evo/BeamNGModManager/releases/latest)** herunter und führen Sie die Datei aus.
@@ -133,7 +133,7 @@ Copyright © 2026 **Lancer10Evo**. Alle Rechte vorbehalten. Nur für den persön
 <summary><b>Documentación Técnica y Manual de Operación (Español)</b></summary>
 
 ### 1. Descripción del Sistema
-**BeamNG.drive Mod Manager Pro** es una utilidad de escritorio independiente para Windows 10 y Windows 11 (x64) diseñada para la resolución automática de rutas, validación de archivos, auditoría de seguridad y gestión de perfiles para **BeamNG.drive** y **BeamMP** en un único archivo ejecutable `.exe`.
+**BeamModManager Ultimate** es una utilidad de escritorio independiente para Windows 10 y Windows 11 (x64) diseñada para la resolución automática de rutas, validación de archivos, auditoría de seguridad y gestión de perfiles para **BeamNG.drive** y **BeamMP** en un único archivo ejecutable `.exe`.
 
 ### 2. Instrucciones de Operación
 1. **Ejecución:** Descargue `BeamNGModManager.exe` desde la sección **[Releases](https://github.com/Lancer10Evo/BeamNGModManager/releases/latest)** y ejecute el archivo.
@@ -154,7 +154,7 @@ Copyright © 2026 **Lancer10Evo**. Todos los derechos reservados. Uso estrictame
 <summary><b>Documentation Technique et Manuel d'Utilisation (Français)</b></summary>
 
 ### 1. Présentation du Système
-**BeamNG.drive Mod Manager Pro** est un utilitaire de bureau autonome pour Windows 10 et Windows 11 (x64) dédié à la détection automatique des chemins, à la validation d'archives, à l'audit de sécurité et à la gestion de profils pour **BeamNG.drive** et **BeamMP**, distribué sous forme d'un fichier `.exe` portable unique.
+**BeamModManager Ultimate** est un utilitaire de bureau autonome pour Windows 10 et Windows 11 (x64) dédié à la détection automatique des chemins, à la validation d'archives, à l'audit de sécurité et à la gestion de profils pour **BeamNG.drive** et **BeamMP**, distribué sous forme d'un fichier `.exe` portable unique.
 
 ### 2. Instructions d'Utilisation
 1. **Lancement :** Téléchargez `BeamNGModManager.exe` depuis la page **[Releases](https://github.com/Lancer10Evo/BeamNGModManager/releases/latest)** et exécutez-le.
@@ -175,7 +175,7 @@ Copyright © 2026 **Lancer10Evo**. Tous droits réservés. Utilisation personnel
 <summary><b>Documentação Técnica e Manual de Operação (Português)</b></summary>
 
 ### 1. Visão Geral do Sistema
-**BeamNG.drive Mod Manager Pro** é um utilitário de desktop autônomo para Windows 10 e Windows 11 (x64) projetado para resolução automática de caminhos, validação de pacotes, auditoria de segurança e gerenciamento de perfis para **BeamNG.drive** e **BeamMP** em um único arquivo `.exe` portátil.
+**BeamModManager Ultimate** é um utilitário de desktop autônomo para Windows 10 e Windows 11 (x64) projetado para resolução automática de caminhos, validação de pacotes, auditoria de segurança e gerenciamento de perfis para **BeamNG.drive** e **BeamMP** em um único arquivo `.exe` portátil.
 
 ### 2. Instruções de Operação
 1. **Execução:** Baixe o arquivo `BeamNGModManager.exe` na seção **[Releases](https://github.com/Lancer10Evo/BeamNGModManager/releases/latest)** e execute-o.
@@ -196,7 +196,7 @@ Copyright © 2026 **Lancer10Evo**. Todos os direitos reservados. Uso exclusivame
 <summary><b>Documentazione Tecnica e Manuale Operativo (Italiano)</b></summary>
 
 ### 1. Panoramica del Sistema
-**BeamNG.drive Mod Manager Pro** è un'utilità desktop autonoma per Windows 10 e Windows 11 (x64) sviluppata per il rilevamento automatico dei percorsi, la convalida degli archivi, la verifica di sicurezza e la gestione dei profili per **BeamNG.drive** e **BeamMP** in un unico file eseguibile `.exe`.
+**BeamModManager Ultimate** è un'utilità desktop autonoma per Windows 10 e Windows 11 (x64) sviluppata per il rilevamento automatico dei percorsi, la convalida degli archivi, la verifica di sicurezza e la gestione dei profili per **BeamNG.drive** e **BeamMP** in un unico file eseguibile `.exe`.
 
 ### 2. Istruzioni Operative
 1. **Avvio:** Scaricare `BeamNGModManager.exe` dalla sezione **[Releases](https://github.com/Lancer10Evo/BeamNGModManager/releases/latest)** ed eseguire il programma.
@@ -217,7 +217,7 @@ Copyright © 2026 **Lancer10Evo**. Tutti i diritti riservati. Consentito solo l'
 <summary><b>Dokumentacja Techniczna i Instrukcja Obsługi (Polski)</b></summary>
 
 ### 1. Opis Systemu
-**BeamNG.drive Mod Manager Pro** to samodzielne narzędzie desktopowe dla systemów Windows 10 i Windows 11 (x64), przeznaczone do automatycznego wykrywania ścieżek, walidacji archiwów, audytu bezpieczeństwa oraz zarządzania profilami dla **BeamNG.drive** i **BeamMP** w postaci pojedynczego pliku `.exe`.
+**BeamModManager Ultimate** to samodzielne narzędzie desktopowe dla systemów Windows 10 i Windows 11 (x64), przeznaczone do automatycznego wykrywania ścieżek, walidacji archiwów, audytu bezpieczeństwa oraz zarządzania profilami dla **BeamNG.drive** i **BeamMP** w postaci pojedynczego pliku `.exe`.
 
 ### 2. Instrukcja Obsługi
 1. **Uruchomienie:** Pobierz plik `BeamNGModManager.exe` z sekcji **[Releases](https://github.com/Lancer10Evo/BeamNGModManager/releases/latest)** i uruchom go.
@@ -238,7 +238,7 @@ Copyright © 2026 **Lancer10Evo**. Wszelkie prawa zastrzeżone. Wyłącznie do u
 <summary><b>Teknik Dokümantasyon ve Kullanım Kılavuzu (Türkçe)</b></summary>
 
 ### 1. Sistem Özeti
-**BeamNG.drive Mod Manager Pro**, **BeamNG.drive** ve **BeamMP** için otomatik yol tespiti, arşiv doğrulama, güvenlik denetimi ve profil yönetimi amacıyla Windows 10 ve Windows 11 (x64) sistemleri için geliştirilmiş, tek bir taşınabilir `.exe` dosyası olarak sunulan bağımsız bir masaüstü uygulamasıdır.
+**BeamModManager Ultimate**, **BeamNG.drive** ve **BeamMP** için otomatik yol tespiti, arşiv doğrulama, güvenlik denetimi ve profil yönetimi amacıyla Windows 10 ve Windows 11 (x64) sistemleri için geliştirilmiş, tek bir taşınabilir `.exe` dosyası olarak sunulan bağımsız bir masaüstü uygulamasıdır.
 
 ### 2. Kullanım Talimatları
 1. **Çalıştırma:** **[Releases](https://github.com/Lancer10Evo/BeamNGModManager/releases/latest)** bölümünden `BeamNGModManager.exe` dosyasını indirin ve çalıştırın.
@@ -259,7 +259,7 @@ Copyright © 2026 **Lancer10Evo**. Tüm hakları saklıdır. Yalnızca kişisel 
 <summary><b>技术文档与操作手册 (简体中文)</b></summary>
 
 ### 1. 系统概述
-**BeamNG.drive Mod Manager Pro** 是一款适用于 Windows 10 和 Windows 11 (x64) 的独立桌面工具，专为 **BeamNG.drive** 与 **BeamMP** 提供自动路径解析、压缩包结构验证、安全审计及配置文件管理。本软件以单一免安装 `.exe` 可执行文件形式分发，无需安装额外运行库。
+**BeamModManager Ultimate** 是一款适用于 Windows 10 和 Windows 11 (x64) 的独立桌面工具，专为 **BeamNG.drive** 与 **BeamMP** 提供自动路径解析、压缩包结构验证、安全审计及配置文件管理。本软件以单一免安装 `.exe` 可执行文件形式分发，无需安装额外运行库。
 
 ### 2. 操作说明
 1. **启动程序：** 从 **[Releases](https://github.com/Lancer10Evo/BeamNGModManager/releases/latest)** 页面下载 `BeamNGModManager.exe` 并直接运行。
@@ -280,7 +280,7 @@ Copyright © 2026 **Lancer10Evo**。保留所有权利。本软件仅供个人�
 <summary><b>技術ドキュメントおよび操作マニュアル (日本語)</b></summary>
 
 ### 1. システム概要
-**BeamNG.drive Mod Manager Pro** は、Windows 10 および Windows 11 (x64) 向けに設計されたスタンドアロン型のデスクトップユーティリティであり、**BeamNG.drive** および **BeamMP** の自動パス解決、アーカイブ検証、セキュリティ監査、プロファイル管理を単一のポータブル `.exe` ファイルで提供します。
+**BeamModManager Ultimate** は、Windows 10 および Windows 11 (x64) 向けに設計されたスタンドアロン型のデスクトップユーティリティであり、**BeamNG.drive** および **BeamMP** の自動パス解決、アーカイブ検証、セキュリティ監査、プロファイル管理を単一のポータブル `.exe` ファイルで提供します。
 
 ### 2. 操作手順
 1. **起動：** **[Releases](https://github.com/Lancer10Evo/BeamNGModManager/releases/latest)** ページから `BeamNGModManager.exe` をダウンロードして 실행します。
@@ -301,7 +301,7 @@ Copyright © 2026 **Lancer10Evo**. All Rights Reserved. 個人の非商用利用
 <summary><b>기술 문서 및 사용 설명서 (한국어)</b></summary>
 
 ### 1. 시스템 개요
-**BeamNG.drive Mod Manager Pro**는 **BeamNG.drive** 및 **BeamMP**의 자동 경로 탐색, 아카이브 검증, 보안 감사 및 프로필 관리를 위해 설계된 Windows 10 및 Windows 11 (x64)용 독립 실행형 데스크톱 유틸리티로, 별도의 런타임 설치가 필요 없는 단일 `.exe` 파일로 제공됩니다.
+**BeamModManager Ultimate**는 **BeamNG.drive** 및 **BeamMP**의 자동 경로 탐색, 아카이브 검증, 보안 감사 및 프로필 관리를 위해 설계된 Windows 10 및 Windows 11 (x64)용 독립 실행형 데스크톱 유틸리티로, 별도의 런타임 설치가 필요 없는 단일 `.exe` 파일로 제공됩니다.
 
 ### 2. 사용 방법
 1. **실행:** **[Releases](https://github.com/Lancer10Evo/BeamNGModManager/releases/latest)** 페이지에서 `BeamNGModManager.exe`를 다운로드하여 실행합니다.
@@ -313,3 +313,4 @@ Copyright © 2026 **Lancer10Evo**. All Rights Reserved. 個人の非商用利用
 ### 3. 라이선스 및 법적 제한 (모든 권리 보유)
 Copyright © 2026 **Lancer10Evo**. All Rights Reserved. 본 소프트웨어는 개인적인 비상업적 용도로만 사용할 수 있습니다. 소스 코드나 실행 파일의 복제, 포크(Fork), 수정, 무단 재배포 및 상업적 이용을 엄격히 금지합니다 ([LICENSE](LICENSE) 참조).
 </details>
+
