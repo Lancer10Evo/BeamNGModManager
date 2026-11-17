@@ -214,7 +214,7 @@ public partial class MainWindow : Window
     private void BtnOpenModHub_Click(object sender, RoutedEventArgs e)
     {
         if (ActiveProfile == null) return;
-        var hubWindow = new ModHubWindow(_installer, ActiveProfile.ModsPath, ReloadModsListAsync)
+        var hubWindow = new ModHubWindow(_installer, ActiveProfile.ModsPath, ReloadModsListAsync, _pathResolver.Config.VirusTotalApiKey)
         {
             Owner = this
         };
@@ -259,7 +259,7 @@ public partial class MainWindow : Window
             string name = Path.GetFileName(filePath);
             LblStatus.Text = $"🛡️ Проверка антивирусом и рекурсивный аудит Lua: {name}...";
 
-            var report = await _securityScanner.ScanArchiveAsync(filePath, null);
+            var report = await _securityScanner.ScanArchiveAsync(filePath, null, _pathResolver.Config.VirusTotalApiKey);
             if (report.Verdict == ScanVerdict.DangerousThreat)
             {
                 if (MessageBox.Show(report.BuildFormattedSummary() + "\n\n⛔ Установка этого архива заблокирована!\nОткрыть отчёт хеша на VirusTotal?",
@@ -463,7 +463,19 @@ public partial class MainWindow : Window
     // --- Диагностика, Здоровье и BeamMP ---
     private void BtnTestLicense_Click(object sender, RoutedEventArgs e)
     {
-        string report = _pathResolver.RunLicenseSimulatorTest();
+        string clip = Clipboard.ContainsText() ? Clipboard.GetText().Trim() : "";
+        if (clip.Length == 64 && clip.All(Uri.IsHexDigit))
+        {
+            _pathResolver.Config.VirusTotalApiKey = clip;
+            _pathResolver.SaveConfig();
+            MessageBox.Show("🔑 Бесплатный API-ключ VirusTotal (64 символа) успешно обнаружен в буфере обмена и сохранён!\n\nТеперь каждый мод автоматически проверяется по облачной базе 70+ антивирусов VirusTotal API v3!",
+                "VirusTotal API v3 Подключён", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        string vtInfo = string.IsNullOrEmpty(_pathResolver.Config.VirusTotalApiKey)
+            ? "\n\n💡 Совет: Скопируйте ваш бесплатный ключ с virustotal.com/gui/my-apikey в буфер обмена и нажмите эту кнопку снова, чтобы включить автопроверку VirusTotal API v3!"
+            : "\n\n🔑 Статус VirusTotal API v3: ✅ Ключ подключён и активен!";
+        string report = _pathResolver.RunLicenseSimulatorTest() + vtInfo;
         MessageBox.Show(report, "Диагностика и Симулятор Лицензий (Steam / Epic)",
             MessageBoxButton.OK, MessageBoxImage.Information);
     }
@@ -624,3 +636,4 @@ public partial class MainWindow : Window
         _pathResolver.SaveConfig();
     }
 }
+

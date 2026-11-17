@@ -14,6 +14,7 @@ public partial class ModHubWindow : Window
     private readonly SecurityScannerService _securityScanner = new();
     private readonly string _targetModsDir;
     private readonly Func<Task> _onModInstalledCallback;
+    private readonly string _vtApiKey;
     private bool _isInsideTrustedPortalSession = false;
 
     // 1. Четыре разрешённых портала модов
@@ -34,12 +35,13 @@ public partial class ModHubWindow : Window
         "sharemods.com"
     };
 
-    public ModHubWindow(SmartInstallerService installer, string targetModsDir, Func<Task> onModInstalledCallback)
+    public ModHubWindow(SmartInstallerService installer, string targetModsDir, Func<Task> onModInstalledCallback, string vtApiKey = "")
     {
         InitializeComponent();
         _installer = installer;
         _targetModsDir = targetModsDir;
         _onModInstalledCallback = onModInstalledCallback;
+        _vtApiKey = vtApiKey;
 
         InitializeWebViewAsync();
     }
@@ -181,7 +183,7 @@ public partial class ModHubWindow : Window
             PbDownload.IsIndeterminate = true;
             LblHubStatus.Text = $"🛡️ Антивирусное сканирование и аудит Lua: {displayFileName}...";
 
-            var scanReport = await _securityScanner.ScanArchiveAsync(quarantineFilePath, sourceHost);
+            var scanReport = await _securityScanner.ScanArchiveAsync(quarantineFilePath, sourceHost, _vtApiKey);
 
             PbDownload.IsIndeterminate = false;
             PbDownload.Value = 100;
@@ -379,4 +381,5 @@ public partial class ModHubWindow : Window
         }
     }
 }
+
 

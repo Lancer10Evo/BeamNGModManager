@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media.Imaging;
 
@@ -37,6 +37,7 @@ public class AppConfig
     public int SelectedProfileIndex { get; set; } = 0;
     public bool UseHardlinks { get; set; } = false;
     public string BeamMpExePath { get; set; } = string.Empty;
+    public string VirusTotalApiKey { get; set; } = string.Empty;
     public List<string> FavoriteMods { get; set; } = new();
     public List<GameProfile> Profiles { get; set; } = new();
     public List<ModPreset> Presets { get; set; } = new();

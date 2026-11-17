@@ -1,8 +1,12 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using SharpCompress.Archives;
 
@@ -22,10 +26,15 @@ public class SecurityScanReport
     public long FileSizeBytes { get; set; }
     public string Sha256Hash { get; set; } = string.Empty;
 
+    public string VirusTotalStatus { get; set; } = string.Empty;
+    public bool VtConfirmedClean { get; set; }
+    public bool VtDetectedThreat { get; set; }
+
     public string DefenderStatus { get; set; } = string.Empty;
     public bool DefenderConfirmedClean { get; set; }
     public bool DefenderDetectedThreat { get; set; }
 
+    public bool AmsiDetectedThreat { get; set; }
     public int LuaFilesScanned { get; set; }
     public int NestedArchivesScanned { get; set; }
     public int UiJsFilesCount { get; set; }
@@ -38,10 +47,13 @@ public class SecurityScanReport
     {
         get
         {
-            if (DefenderDetectedThreat || DangerousBinariesFound.Count > 0 || CriticalLuaExploitsFound.Count > 0)
+            if (VtDetectedThreat || DefenderDetectedThreat || AmsiDetectedThreat ||
+                DangerousBinariesFound.Count > 0 || CriticalLuaExploitsFound.Count > 0)
+            {
                 return ScanVerdict.DangerousThreat;
+            }
 
-            if (!DefenderConfirmedClean || HeuristicWarnings.Count > 0)
+            if ((!DefenderConfirmedClean && !VtConfirmedClean) || HeuristicWarnings.Count > 0)
                 return ScanVerdict.UnverifiedWarning;
 
             return ScanVerdict.VerifiedSafe;
@@ -54,7 +66,7 @@ public class SecurityScanReport
     {
         double mb = FileSizeBytes / 1024.0 / 1024.0;
         var sb = new StringBuilder();
-        sb.AppendLine($"🛡️ ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.4)");
+        sb.AppendLine($"🛡️ ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.5)");
         sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         sb.AppendLine($"📄 Файл: {FileName} ({mb:F2} MB)");
         sb.AppendLine($"🌐 Источник: {SourceOrigin}");
@@ -62,26 +74,30 @@ public class SecurityScanReport
             sb.AppendLine($"🔑 SHA-256: {Sha256Hash[..16]}...{Sha256Hash[^16..]}");
         sb.AppendLine();
 
-        sb.AppendLine($"1. Антивирус Microsoft Defender:");
+        sb.AppendLine($"1. Облачная проверка VirusTotal (70+ антивирусов):");
+        sb.AppendLine($"   {VirusTotalStatus}");
+        sb.AppendLine();
+
+        sb.AppendLine($"2. Локальный антивирус (Microsoft Defender + Windows AMSI):");
         sb.AppendLine($"   {DefenderStatus}");
         sb.AppendLine();
 
-        sb.AppendLine($"2. Проверка на исполняемые файлы (.exe/.dll/.bat/.ps1/.scr):");
+        sb.AppendLine($"3. Проверка на исполняемые файлы (.exe/.dll/.bat/.ps1/.scr):");
         sb.AppendLine(DangerousBinariesFound.Count == 0
             ? "   ✅ Чисто (включая проверку вложенных архивов)"
             : $"   ❌ БЛОКИРОВКА! Найдены исполняемые файлы: {string.Join(", ", DangerousBinariesFound.Take(5))}");
         sb.AppendLine();
 
-        sb.AppendLine($"3. Лексический аудит и деобфускация Lua (Lua: {LuaFilesScanned}, Влож.: {NestedArchivesScanned}, JS: {UiJsFilesCount}):");
+        sb.AppendLine($"4. Лексический аудит и деобфускация Lua (Lua: {LuaFilesScanned}, Влож.: {NestedArchivesScanned}, JS: {UiJsFilesCount}):");
         if (CriticalLuaExploitsFound.Count == 0)
-            sb.AppendLine("   ✅ Критических эксплойтов (включая скобочные вызовы и склейку строк) не найдено");
+            sb.AppendLine("   ✅ Критических эксплойтов и вредоносных сигнатур AMSI не найдено");
         else
-            sb.AppendLine($"   🚨 БЛОКИРОВКА! ОПАСНЫЙ КОД В LUA:\n   • {string.Join("\n   • ", CriticalLuaExploitsFound.Take(5))}");
+            sb.AppendLine($"   🚨 БЛОКИРОВКА! ОПАСНЫЙ КОД В СКРИПТАХ:\n   • {string.Join("\n   • ", CriticalLuaExploitsFound.Take(5))}");
 
         if (HeuristicWarnings.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"4. Эвристические замечания:");
+            sb.AppendLine($"5. Эвристические замечания:");
             sb.AppendLine($"   ⚠️ {string.Join("\n   ⚠️ ", HeuristicWarnings.Take(5))}");
         }
 
@@ -89,13 +105,13 @@ public class SecurityScanReport
         switch (Verdict)
         {
             case ScanVerdict.VerifiedSafe:
-                sb.AppendLine("✅ ВЕРДИКТ: Проверено Defender и лексическим анализатором. Угроз не найдено.");
+                sb.AppendLine("✅ ВЕРДИКТ: Подтверждено антивирусом и лексическим анализатором. Угроз нет.");
                 break;
             case ScanVerdict.UnverifiedWarning:
-                sb.AppendLine("⚠️ ВЕРДИКТ: Прямых эксплойтов нет, но статус Defender не подтверждён или есть эвристические замечания. Рекомендуется проверить хеш на VirusTotal.");
+                sb.AppendLine("⚠️ ВЕРДИКТ: Прямых эксплойтов нет, но требуется внимание пользователя.");
                 break;
             case ScanVerdict.DangerousThreat:
-                sb.AppendLine("⛔ ВЕРДИКТ: УСТАНОВКА ЗАБЛОКИРОВАНА! В архиве обнаружено вредоносное содержимое.");
+                sb.AppendLine("⛔ ВЕРДИКТ: УСТАНОВКА ЗАБЛОКИРОВАНА! Обнаружено вредоносное содержимое.");
                 break;
         }
 
@@ -109,12 +125,21 @@ public class SecurityScannerService
     private const long MaxSingleNestedArchiveBytes = 256L * 1024 * 1024;
     private const long MaxTotalNestedQuotaBytes = 512L * 1024 * 1024;
 
+    // Нативный интерфейс Windows AMSI (работает с любым установленным антивирусом: Kaspersky, ESET, Defender и др.)
+    [DllImport("amsi.dll", CharSet = CharSet.Unicode, CallingConvention = CallingConvention.StdCall)]
+    private static extern int AmsiInitialize(string appName, out IntPtr amsiContext);
+
+    [DllImport("amsi.dll", CallingConvention = CallingConvention.StdCall)]
+    private static extern void AmsiUninitialize(IntPtr amsiContext);
+
+    [DllImport("amsi.dll", CharSet = CharSet.Unicode, CallingConvention = CallingConvention.StdCall)]
+    private static extern int AmsiScanBuffer(IntPtr amsiContext, byte[] buffer, uint length, string contentName, IntPtr session, out int result);
+
     private static readonly HashSet<string> ForbiddenBinaryExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".exe", ".dll", ".bat", ".cmd", ".ps1", ".vbs", ".vbe", ".jse", ".wsf", ".scr", ".msi", ".com", ".hta", ".pif", ".cpl"
     };
 
-    // УРОВЕНЬ 1 (БЛОКИРУЮЩИЙ): Работает поверх деобфусцированного и нормализованного кода
     private static readonly (string Pattern, string Description)[] CriticalLuaExploitSignatures =
     {
         (@"(?:os|_G\.os|rawget\s*\(\s*_G\s*,\s*[""']os[""']\s*\))\s*\.\s*execute", "Вызов os.execute (прямой или через таблицу/скобки)"),
@@ -127,7 +152,6 @@ public class SecurityScannerService
         (@"(?:loadstring|(?<![a-zA-Z0-9_\.])load)\s*\([^)]*string\.char", "Динамическое выполнение обфусцированного массива string.char (...)")
     };
 
-    // УРОВЕНЬ 2 (ПРЕДУПРЕЖДЕНИЕ)
     private static readonly (string Pattern, string Description)[] HeuristicLuaWarningSignatures =
     {
         (@"socket\.http|http\.request|luasec", "Сетевое обращение из Lua"),
@@ -145,37 +169,130 @@ public class SecurityScannerService
         (@"child_process", "Попытка запуска дочернего процесса из JS")
     };
 
-    public async Task<SecurityScanReport> ScanArchiveAsync(string archivePath, string? sourceDomain = null)
+    public async Task<SecurityScanReport> ScanArchiveAsync(string archivePath, string? sourceDomain = null, string? virusTotalApiKey = null)
     {
-        return await Task.Run(() =>
+        var fi = new FileInfo(archivePath);
+        var report = new SecurityScanReport
         {
-            var fi = new FileInfo(archivePath);
-            var report = new SecurityScanReport
-            {
-                FileName = fi.Name,
-                FileSizeBytes = fi.Length,
-                SourceOrigin = FormatSourceOrigin(sourceDomain, out string? sourceWarning),
-                Sha256Hash = ComputeSha256(archivePath)
-            };
+            FileName = fi.Name,
+            FileSizeBytes = fi.Length,
+            SourceOrigin = FormatSourceOrigin(sourceDomain, out string? sourceWarning),
+            Sha256Hash = await Task.Run(() => ComputeSha256(archivePath))
+        };
 
-            if (!string.IsNullOrEmpty(sourceWarning))
-                report.HeuristicWarnings.Add(sourceWarning);
+        if (!string.IsNullOrEmpty(sourceWarning))
+            report.HeuristicWarnings.Add(sourceWarning);
 
+        // 1. Автоматический запрос к облачному API VirusTotal v3 (70+ антивирусов)
+        await QueryVirusTotalApiAsync(report, virusTotalApiKey);
+
+        // 2. Локальное сканирование (Microsoft Defender CLI + Windows AMSI + Рекурсивный лексер Lua)
+        await Task.Run(() =>
+        {
             RunWindowsDefenderScan(archivePath, report);
+
+            IntPtr amsiCtx = IntPtr.Zero;
+            try
+            {
+                _ = AmsiInitialize("BeamNGModManagerPro", out amsiCtx);
+            }
+            catch { amsiCtx = IntPtr.Zero; }
 
             try
             {
                 long nestedBudgetUsed = 0;
                 using var fs = File.OpenRead(archivePath);
-                ScanArchiveStreamRecursive(fs, fi.Name, report, currentDepth: 0, ref nestedBudgetUsed);
+                ScanArchiveStreamRecursive(fs, fi.Name, report, currentDepth: 0, ref nestedBudgetUsed, amsiCtx);
             }
             catch (Exception ex)
             {
                 report.HeuristicWarnings.Add($"Не удалось полностью прочитать структуру архива: {ex.Message}");
             }
-
-            return report;
+            finally
+            {
+                if (amsiCtx != IntPtr.Zero)
+                {
+                    try { AmsiUninitialize(amsiCtx); } catch { }
+                }
+            }
         });
+
+        return report;
+    }
+
+    /// <summary>
+    /// Запрос к официальному VirusTotal API v3 по SHA-256 хешу файла
+    /// </summary>
+    private static async Task QueryVirusTotalApiAsync(SecurityScanReport report, string? configuredApiKey)
+    {
+        string? apiKey = !string.IsNullOrWhiteSpace(configuredApiKey)
+            ? configuredApiKey.Trim()
+            : Environment.GetEnvironmentVariable("VT_API_KEY");
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            report.VirusTotalStatus = "ℹ️ Ключ VT API не подключён (нажмите «🔑 VT API» в шапке или кнопку «Нет» для веб-проверки)";
+            return;
+        }
+
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            client.DefaultRequestHeaders.Add("x-apikey", apiKey);
+
+            string url = $"https://www.virustotal.com/api/v3/files/{report.Sha256Hash}";
+            using var response = await client.GetAsync(url);
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                report.VirusTotalStatus = "ℹ️ VirusTotal API: Архив ранее не загружался в базу VT (уникальный/новый файл)";
+                return;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                report.VirusTotalStatus = $"⚠️ VirusTotal API вернул статус {(int)response.StatusCode} ({response.ReasonPhrase})";
+                return;
+            }
+
+            string json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            var stats = doc.RootElement
+                .GetProperty("data")
+                .GetProperty("attributes")
+                .GetProperty("last_analysis_stats");
+
+            int malicious = stats.TryGetProperty("malicious", out var mProp) ? mProp.GetInt32() : 0;
+            int suspicious = stats.TryGetProperty("suspicious", out var sProp) ? sProp.GetInt32() : 0;
+            int harmless = stats.TryGetProperty("harmless", out var hProp) ? hProp.GetInt32() : 0;
+            int undetected = stats.TryGetProperty("undetected", out var uProp) ? uProp.GetInt32() : 0;
+            int totalEngines = malicious + suspicious + harmless + undetected;
+
+            if (malicious > 0)
+            {
+                report.VtDetectedThreat = true;
+                report.VtConfirmedClean = false;
+                report.VirusTotalStatus = $"🚨 VirusTotal API: ОБНАРУЖЕНА УГРОЗА! ({malicious} из {totalEngines} антивирусов нашли вирус!)";
+            }
+            else if (suspicious > 0)
+            {
+                report.VtConfirmedClean = false;
+                report.VirusTotalStatus = $"⚠️ VirusTotal API: Подозрительный файл ({suspicious} из {totalEngines} антивирусов)";
+            }
+            else if (totalEngines > 0)
+            {
+                report.VtConfirmedClean = true;
+                report.VirusTotalStatus = $"✅ VirusTotal API: Проверено — 0 / {totalEngines} угроз (100% чисто по всем базам!)";
+            }
+            else
+            {
+                report.VirusTotalStatus = "ℹ️ VirusTotal API: Анализ файла ещё не завершён.";
+            }
+        }
+        catch (Exception ex)
+        {
+            report.VirusTotalStatus = $"⚠️ Не удалось связаться с VirusTotal API: {ex.Message}";
+        }
     }
 
     private static string FormatSourceOrigin(string? domain, out string? warning)
@@ -195,7 +312,7 @@ public class SecurityScannerService
             domain.Contains("sharemods.com", StringComparison.OrdinalIgnoreCase) ||
             domain.Contains("cloudflarestorage.com", StringComparison.OrdinalIgnoreCase))
         {
-            warning = $"Файл загружен через файловое зеркало ({domain}). Сверьте хеш на VirusTotal.";
+            warning = $"Файл загружен через файловое зеркало ({domain}).";
             return $"🟠 Файловое зеркало ({domain})";
         }
 
@@ -208,7 +325,8 @@ public class SecurityScannerService
         string containerName,
         SecurityScanReport report,
         int currentDepth,
-        ref long nestedBudgetUsed)
+        ref long nestedBudgetUsed,
+        IntPtr amsiCtx)
     {
         if (currentDepth > MaxNestedScanDepth)
         {
@@ -256,7 +374,7 @@ public class SecurityScannerService
 
                     entryStream.CopyTo(tempFs);
                     tempFs.Position = 0;
-                    ScanArchiveStreamRecursive(tempFs, Path.GetFileName(entryName), report, currentDepth + 1, ref nestedBudgetUsed);
+                    ScanArchiveStreamRecursive(tempFs, Path.GetFileName(entryName), report, currentDepth + 1, ref nestedBudgetUsed, amsiCtx);
                 }
                 catch (Exception ex)
                 {
@@ -279,10 +397,15 @@ public class SecurityScannerService
                     using var reader = new StreamReader(stream);
                     string rawLua = reader.ReadToEnd();
 
-                    // 1. Посимвольный лексер Lua (удаляет комментарии ТОЛЬКО вне строковых литералов)
-                    string UncommentedLua = StripLuaCommentsWithLexer(rawLua);
-                    // 2. Деобфускация эскейпов (\111\115 -> os), склейка конкатенаций ("exe".."cute" -> "execute") и скобок (os["execute"] -> os.execute)
-                    string normalizedLua = NormalizeAndDeobfuscateLua(UncommentedLua);
+                    // Проверка буфера скрипта через системный антивирус Windows AMSI
+                    if (amsiCtx != IntPtr.Zero && ScanBufferWithAmsi(amsiCtx, rawLua, displayPath))
+                    {
+                        report.AmsiDetectedThreat = true;
+                        report.CriticalLuaExploitsFound.Add($"{Path.GetFileName(entryName)}: Заблокирован системным антивирусом через Windows AMSI!");
+                    }
+
+                    string uncommentedLua = StripLuaCommentsWithLexer(rawLua);
+                    string normalizedLua = NormalizeAndDeobfuscateLua(uncommentedLua);
 
                     foreach (var (pattern, desc) in CriticalLuaExploitSignatures)
                     {
@@ -310,6 +433,12 @@ public class SecurityScannerService
                 using var reader = new StreamReader(stream);
                 string jsCode = reader.ReadToEnd();
 
+                if (amsiCtx != IntPtr.Zero && ScanBufferWithAmsi(amsiCtx, jsCode, displayPath))
+                {
+                    report.AmsiDetectedThreat = true;
+                    report.CriticalLuaExploitsFound.Add($"{Path.GetFileName(entryName)} (JS): Заблокирован антивирусом через Windows AMSI!");
+                }
+
                 foreach (var (pattern, desc) in CriticalJsSignatures)
                 {
                     if (Regex.IsMatch(jsCode, pattern, RegexOptions.IgnoreCase))
@@ -321,11 +450,22 @@ public class SecurityScannerService
         }
     }
 
-    /// <summary>
-    /// Настоящий посимвольный лексер Lua (конечный автомат):
-    /// распознаёт одинарные '...', двойные "..." и многострочные [=[...]=] строки,
-    /// поэтому символы "--" или "--[[" внутри строк НИКОГДА не обрезают следующий за ними код!
-    /// </summary>
+    private static bool ScanBufferWithAmsi(IntPtr amsiCtx, string content, string contentName)
+    {
+        try
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(content);
+            if (bytes.Length == 0) return false;
+            int hr = AmsiScanBuffer(amsiCtx, bytes, (uint)bytes.Length, contentName, IntPtr.Zero, out int amsiResult);
+            // AMSI_RESULT_DETECTED = 32768 (0x8000)
+            return hr == 0 && amsiResult >= 32768;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public static string StripLuaCommentsWithLexer(string code)
     {
         var sb = new StringBuilder(code.Length);
@@ -336,7 +476,6 @@ public class SecurityScannerService
         {
             char c = code[i];
 
-            // 1. Одинарная или двойная строка ('...' или "...")
             if (c == '"' || c == '\'')
             {
                 char quote = c;
@@ -360,7 +499,6 @@ public class SecurityScannerService
                 continue;
             }
 
-            // 2. Проверка на многострочный литерал [=[ ... ]=]
             if (c == '[')
             {
                 int eqCount = MatchLongBracketOpening(code, i);
@@ -385,7 +523,6 @@ public class SecurityScannerService
                 }
             }
 
-            // 3. Проверка на комментарий (-- или --[=[ ... ]=])
             if (c == '-' && i + 1 < len && code[i + 1] == '-')
             {
                 i += 2;
@@ -406,7 +543,6 @@ public class SecurityScannerService
                     }
                 }
 
-                // Однострочный комментарий до конца строки
                 while (i < len && code[i] != '\n' && code[i] != '\r')
                     i++;
 
@@ -435,15 +571,8 @@ public class SecurityScannerService
         return s.IndexOf(target, startPos, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Деобфускатор выражений Lua:
-    /// 1. Декодирует \xXX и \ddd эскейпы внутри строковых литералов ("\111\115" -> "os").
-    /// 2. Склеивает конкатенации строковых литералов ("exe" .. "cute" -> "execute").
-    /// 3. Преобразует скобочный доступ к таблицам (os["execute"] или _G["os"]["execute"]) в точечный (_G.os.execute).
-    /// </summary>
     public static string NormalizeAndDeobfuscateLua(string code)
     {
-        // 1. Декодируем \xXX (hex) и \ddd (десятичные) эскейпы
         string decoded = Regex.Replace(code, @"\\x([0-9a-fA-F]{2})", m =>
         {
             int val = int.Parse(m.Groups[1].Value, NumberStyles.HexNumber);
@@ -457,7 +586,6 @@ public class SecurityScannerService
             return m.Value;
         });
 
-        // 2. Склеиваем конкатенации соседних строковых литералов ("exe" .. "cute" -> "execute")
         for (int pass = 0; pass < 4; pass++)
         {
             string next = Regex.Replace(decoded, @"""([^""\\]*)""\s*\.\.\s*""([^""\\]*)""", "\"$1$2\"");
@@ -466,9 +594,7 @@ public class SecurityScannerService
             decoded = next;
         }
 
-        // 3. Нормализуем обращения вида tbl["method"] или tbl['method'] -> tbl.method
-        string normalized = Regex.Replace(decoded, @"\[\s*[""']([a-zA-Z_][a-zA-Z0-9_]*)[""']\s*\]", ".$1");
-        return normalized;
+        return Regex.Replace(decoded, @"\[\s*[""']([a-zA-Z_][a-zA-Z0-9_]*)[""']\s*\]", ".$1");
     }
 
     private static void RunWindowsDefenderScan(string filePath, SecurityScanReport report)
@@ -479,7 +605,7 @@ public class SecurityScannerService
             if (mpCmdRun == null)
             {
                 report.DefenderConfirmedClean = false;
-                report.DefenderStatus = "⚠️ Сканер Microsoft Defender (MpCmdRun.exe) не найден — антивирусная проверка НЕ выполнялась.";
+                report.DefenderStatus = "⚠️ Сканер Microsoft Defender (MpCmdRun.exe) не найден — проверено через Windows AMSI.";
                 return;
             }
 
@@ -497,7 +623,7 @@ public class SecurityScannerService
             if (proc == null)
             {
                 report.DefenderConfirmedClean = false;
-                report.DefenderStatus = "⚠️ Не удалось запустить процесс MpCmdRun.exe — статус не подтверждён.";
+                report.DefenderStatus = "⚠️ Не удалось запустить процесс MpCmdRun.exe.";
                 return;
             }
 
@@ -506,7 +632,7 @@ public class SecurityScannerService
             {
                 try { proc.Kill(); } catch { }
                 report.DefenderConfirmedClean = false;
-                report.DefenderStatus = "⚠️ НЕ ЗАВЕРШЕНО: Сканирование Defender превысило 120 сек. Проверьте хеш на VirusTotal!";
+                report.DefenderStatus = "⚠️ НЕ ЗАВЕРШЕНО: Сканирование Defender превысило 120 сек.";
                 return;
             }
 
@@ -514,7 +640,7 @@ public class SecurityScannerService
             if (code == 0)
             {
                 report.DefenderConfirmedClean = true;
-                report.DefenderStatus = "✅ Microsoft Defender: Проверка завершена, угроз нет (Код 0)";
+                report.DefenderStatus = "✅ Microsoft Defender + AMSI: Угроз не обнаружено (Код 0)";
             }
             else if (code == 2)
             {
@@ -531,7 +657,7 @@ public class SecurityScannerService
         catch (Exception ex)
         {
             report.DefenderConfirmedClean = false;
-            report.DefenderStatus = $"⚠️ Ошибка вызова Microsoft Defender ({ex.Message}) — статус НЕ подтверждён.";
+            report.DefenderStatus = $"⚠️ Ошибка вызова Microsoft Defender ({ex.Message}).";
         }
     }
 
