@@ -509,9 +509,9 @@ public partial class MainWindow : Window
         stack.Children.Add(lblHint);
 
         var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        var btnGetKey = new Button { Content = "🌐 Получить ключ", Padding = new Thickness(12, 6), Margin = new Thickness(0, 0, 8, 0) };
-        var btnClear = new Button { Content = "🗑️ Удалить ключ", Padding = new Thickness(12, 6), Margin = new Thickness(0, 0, 8, 0) };
-        var btnSave = new Button { Content = "✅ Проверить и Сохранить", Padding = new Thickness(14, 6), FontWeight = FontWeights.Bold };
+        var btnGetKey = new Button { Content = "🌐 Получить ключ", Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
+        var btnClear = new Button { Content = "🗑️ Удалить ключ", Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
+        var btnSave = new Button { Content = "✅ Проверить и Сохранить", Padding = new Thickness(14, 6, 14, 6), FontWeight = FontWeights.Bold };
 
         btnGetKey.Click += (_, _) => Process.Start(new ProcessStartInfo("https://www.virustotal.com/gui/my-apikey") { UseShellExecute = true });
         btnClear.Click += (_, _) =>
@@ -704,5 +704,6 @@ public partial class MainWindow : Window
         _pathResolver.SaveConfig();
     }
 }
+
 
 
