@@ -72,7 +72,7 @@ public class SecurityScanReport
     {
         double mb = FileSizeBytes / 1024.0 / 1024.0;
         var sb = new StringBuilder();
-        sb.AppendLine($"🛡️ ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.6)");
+        sb.AppendLine($"🛡️ ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.7)");
         sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         sb.AppendLine($"📄 Файл: {FileName} ({mb:F2} MB)");
         sb.AppendLine($"🌐 Источник: {SourceOrigin}");
@@ -115,7 +115,9 @@ public class SecurityScanReport
         switch (Verdict)
         {
             case ScanVerdict.VerifiedSafe:
-                sb.AppendLine("✅ ВЕРДИКТ: Локальная проверка Defender завершена (Код 0), опасных сигнатур в скриптах нет.");
+                sb.AppendLine(LuaFilesScanned == 0 && UiJsFilesCount == 0
+                    ? "✅ ВЕРДИКТ: Чистый ресурсный мод (исполняемых скриптов .lua/.js и бинарников внутри нет, Defender: Код 0)."
+                    : "✅ ВЕРДИКТ: Defender проверил архив (Код 0), совпадений с чёрным списком шаблонов в Lua не найдено (шаблоны не исключают неизвестную обфускацию — учитывайте источник).");
                 break;
             case ScanVerdict.UnverifiedWarning:
                 sb.AppendLine("⚠️ ВЕРДИКТ: Статус НЕ подтверждён полностью (либо есть замечания эвристики / единичные срабатывания). Решение за вами.");
@@ -170,7 +172,10 @@ public class SecurityScannerService
         (@"_G\s*\.|_G\s*\[|rawget\s*\(\s*_G", "Динамическое обращение к глобальной таблице _G"),
         (@"setfenv\s*\(|getfenv\s*\(", "Изменение окружения функций (setfenv / getfenv)"),
         (@"string\.char\s*\((?:\s*\d+\s*,){5,}", "Цепочка string.char(...)"),
-        (@"os\s*\.\s*(?:remove|rename)\b", "Удаление или переименование файлов (os.remove / os.rename)")
+        (@"os\s*\.\s*(?:remove|rename|getenv|tmpname)\b", "Обращение к файловой системе или окружению ОС (os.remove/rename/getenv)"),
+        (@"(?<![a-zA-Z0-9_\.])(?:dofile|loadfile)\s*\(", "Загрузка внешних скриптов с диска (dofile / loadfile)"),
+        (@"io\s*\.\s*(?:open|write|lines|input|output)\b", "Прямой файловый ввод-вывод из Lua (io.open / io.write)"),
+        (@"debug\s*\.\s*(?:getregistry|setupvalue|getupvalue|sethook|setmetatable)\b", "Низкоуровневое вмешательство через библиотеку debug.*")
     };
 
     private static readonly (string Pattern, string Description)[] CriticalJsSignatures =
@@ -751,3 +756,4 @@ public class SecurityScannerService
         return Convert.ToHexString(SHA256.HashData(stream));
     }
 }
+
