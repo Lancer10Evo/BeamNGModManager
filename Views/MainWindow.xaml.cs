@@ -214,7 +214,7 @@ public partial class MainWindow : Window
     private void BtnOpenModHub_Click(object sender, RoutedEventArgs e)
     {
         if (ActiveProfile == null) return;
-        var hubWindow = new ModHubWindow(_installer, ActiveProfile.ModsPath, ReloadModsListAsync, _pathResolver.Config.VirusTotalApiKey)
+        var hubWindow = new ModHubWindow(_installer, ActiveProfile.ModsPath, ReloadModsListAsync, _pathResolver.Config.GetVtApiKey())
         {
             Owner = this
         };
@@ -259,7 +259,7 @@ public partial class MainWindow : Window
             string name = Path.GetFileName(filePath);
             LblStatus.Text = $"🛡️ Проверка антивирусом и рекурсивный аудит Lua: {name}...";
 
-            var report = await _securityScanner.ScanArchiveAsync(filePath, null, _pathResolver.Config.VirusTotalApiKey);
+            var report = await _securityScanner.ScanArchiveAsync(filePath, null, _pathResolver.Config.GetVtApiKey());
             if (report.Verdict == ScanVerdict.DangerousThreat)
             {
                 if (MessageBox.Show(report.BuildFormattedSummary() + "\n\n⛔ Установка этого архива заблокирована!\nОткрыть отчёт хеша на VirusTotal?",
@@ -463,21 +463,89 @@ public partial class MainWindow : Window
     // --- Диагностика, Здоровье и BeamMP ---
     private void BtnTestLicense_Click(object sender, RoutedEventArgs e)
     {
-        string clip = Clipboard.ContainsText() ? Clipboard.GetText().Trim() : "";
-        if (clip.Length == 64 && clip.All(Uri.IsHexDigit))
-        {
-            _pathResolver.Config.VirusTotalApiKey = clip;
-            _pathResolver.SaveConfig();
-            MessageBox.Show("🔑 Бесплатный API-ключ VirusTotal (64 символа) успешно обнаружен в буфере обмена и сохранён!\n\nТеперь каждый мод автоматически проверяется по облачной базе 70+ антивирусов VirusTotal API v3!",
-                "VirusTotal API v3 Подключён", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-        string vtInfo = string.IsNullOrEmpty(_pathResolver.Config.VirusTotalApiKey)
-            ? "\n\n💡 Совет: Скопируйте ваш бесплатный ключ с virustotal.com/gui/my-apikey в буфер обмена и нажмите эту кнопку снова, чтобы включить автопроверку VirusTotal API v3!"
-            : "\n\n🔑 Статус VirusTotal API v3: ✅ Ключ подключён и активен!";
-        string report = _pathResolver.RunLicenseSimulatorTest() + vtInfo;
+        string report = _pathResolver.RunLicenseSimulatorTest();
         MessageBox.Show(report, "Диагностика и Симулятор Лицензий (Steam / Epic)",
             MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void BtnVtApi_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Window
+        {
+            Title = "🔑 Настройка VirusTotal API v3 (DPAPI Encrypted)",
+            Width = 520,
+            Height = 250,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Owner = this,
+            ResizeMode = ResizeMode.NoResize,
+            Background = (System.Windows.Media.Brush)FindResource("BgDark"),
+            Foreground = (System.Windows.Media.Brush)FindResource("TextPrimary")
+        };
+
+        var stack = new StackPanel { Margin = new Thickness(18) };
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Введите ваш персональный API-ключ VirusTotal (64 символа):",
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 6)
+        });
+
+        var txtKey = new PasswordBox
+        {
+            Password = _pathResolver.Config.GetVtApiKey(),
+            Height = 34,
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        stack.Children.Add(txtKey);
+
+        var lblHint = new TextBlock
+        {
+            Text = "🔒 Ключ проверяется на сервере VirusTotal (защита от случайной вставки SHA-256 хеша) и сохраняется в зашифрованном виде через Windows DPAPI.",
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = (System.Windows.Media.Brush)FindResource("TextSecondary"),
+            Margin = new Thickness(0, 0, 0, 14)
+        };
+        stack.Children.Add(lblHint);
+
+        var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var btnGetKey = new Button { Content = "🌐 Получить ключ", Padding = new Thickness(12, 6), Margin = new Thickness(0, 0, 8, 0) };
+        var btnClear = new Button { Content = "🗑️ Удалить ключ", Padding = new Thickness(12, 6), Margin = new Thickness(0, 0, 8, 0) };
+        var btnSave = new Button { Content = "✅ Проверить и Сохранить", Padding = new Thickness(14, 6), FontWeight = FontWeights.Bold };
+
+        btnGetKey.Click += (_, _) => Process.Start(new ProcessStartInfo("https://www.virustotal.com/gui/my-apikey") { UseShellExecute = true });
+        btnClear.Click += (_, _) =>
+        {
+            _pathResolver.Config.SetVtApiKey("");
+            _pathResolver.SaveConfig();
+            txtKey.Password = "";
+            MessageBox.Show("Ключ VirusTotal удалён из конфигурации.", dlg.Title, MessageBoxButton.OK, MessageBoxImage.Information);
+            dlg.Close();
+        };
+        btnSave.Click += async (_, _) =>
+        {
+            btnSave.IsEnabled = false;
+            var (isValid, msg) = await _securityScanner.ValidateVtApiKeyAsync(txtKey.Password);
+            btnSave.IsEnabled = true;
+
+            if (!isValid)
+            {
+                MessageBox.Show(msg, "Ошибка проверки ключа", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            _pathResolver.Config.SetVtApiKey(txtKey.Password);
+            _pathResolver.SaveConfig();
+            MessageBox.Show(msg, dlg.Title, MessageBoxButton.OK, MessageBoxImage.Information);
+            dlg.Close();
+        };
+
+        btnPanel.Children.Add(btnGetKey);
+        btnPanel.Children.Add(btnClear);
+        btnPanel.Children.Add(btnSave);
+        stack.Children.Add(btnPanel);
+        dlg.Content = stack;
+        dlg.ShowDialog();
     }
 
     private async void BtnHealthCheck_Click(object sender, RoutedEventArgs e)
@@ -636,4 +704,5 @@ public partial class MainWindow : Window
         _pathResolver.SaveConfig();
     }
 }
+
 

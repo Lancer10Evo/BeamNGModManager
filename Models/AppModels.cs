@@ -1,5 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Windows.Media.Imaging;
 
 namespace BeamNGModManager.Models;
@@ -37,10 +39,44 @@ public class AppConfig
     public int SelectedProfileIndex { get; set; } = 0;
     public bool UseHardlinks { get; set; } = false;
     public string BeamMpExePath { get; set; } = string.Empty;
-    public string VirusTotalApiKey { get; set; } = string.Empty;
+    public string EncryptedVtApiKey { get; set; } = string.Empty;
     public List<string> FavoriteMods { get; set; } = new();
     public List<GameProfile> Profiles { get; set; } = new();
     public List<ModPreset> Presets { get; set; } = new();
+
+    public void SetVtApiKey(string plainKey)
+    {
+        if (string.IsNullOrWhiteSpace(plainKey))
+        {
+            EncryptedVtApiKey = string.Empty;
+            return;
+        }
+
+        byte[] raw = Encoding.UTF8.GetBytes(plainKey.Trim());
+        byte[] encrypted = ProtectedData.Protect(raw, null, DataProtectionScope.CurrentUser);
+        EncryptedVtApiKey = "DPAPI:" + Convert.ToBase64String(encrypted);
+    }
+
+    public string GetVtApiKey()
+    {
+        if (string.IsNullOrWhiteSpace(EncryptedVtApiKey))
+            return string.Empty;
+
+        try
+        {
+            if (EncryptedVtApiKey.StartsWith("DPAPI:", StringComparison.Ordinal))
+            {
+                byte[] encrypted = Convert.FromBase64String(EncryptedVtApiKey["DPAPI:".Length..]);
+                byte[] raw = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
+                return Encoding.UTF8.GetString(raw);
+            }
+            return string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
 }
 
 public class ModItem : INotifyPropertyChanged

@@ -14,9 +14,9 @@ namespace BeamNGModManager.Services;
 
 public enum ScanVerdict
 {
-    VerifiedSafe,
-    UnverifiedWarning,
-    DangerousThreat
+    VerifiedSafe,      // Локальный Defender подтвердил чистоту (Код 0) + нет угроз/предупреждений в скриптах и VT
+    UnverifiedWarning, // Прямых эксплойтов нет, но Defender не завершился, либо на VT 1-2 подозрения, либо сработала эвристика
+    DangerousThreat    // Найдены бинарники (.exe/.dll/.bat), вирус Defender (Код 2), >=3 детектов на VT или прямой эксплойт -> БЛОКИРОВКА
 }
 
 public class SecurityScanReport
@@ -28,13 +28,17 @@ public class SecurityScanReport
 
     public string VirusTotalStatus { get; set; } = string.Empty;
     public bool VtConfirmedClean { get; set; }
-    public bool VtDetectedThreat { get; set; }
+    public bool VtDetectedHighThreat { get; set; } // >= 3 детектов на VT -> блокировка
+    public bool VtHasLowDetections { get; set; }   // 1-2 детекта или suspicious -> предупреждение
 
     public string DefenderStatus { get; set; } = string.Empty;
     public bool DefenderConfirmedClean { get; set; }
     public bool DefenderDetectedThreat { get; set; }
 
+    public bool AmsiInitialized { get; set; }
+    public int AmsiScriptsScanned { get; set; }
     public bool AmsiDetectedThreat { get; set; }
+
     public int LuaFilesScanned { get; set; }
     public int NestedArchivesScanned { get; set; }
     public int UiJsFilesCount { get; set; }
@@ -47,13 +51,15 @@ public class SecurityScanReport
     {
         get
         {
-            if (VtDetectedThreat || DefenderDetectedThreat || AmsiDetectedThreat ||
+            if (VtDetectedHighThreat || DefenderDetectedThreat || AmsiDetectedThreat ||
                 DangerousBinariesFound.Count > 0 || CriticalLuaExploitsFound.Count > 0)
             {
                 return ScanVerdict.DangerousThreat;
             }
 
-            if ((!DefenderConfirmedClean && !VtConfirmedClean) || HeuristicWarnings.Count > 0)
+            // Для VerifiedSafe ОБЯЗАТЕЛЬНО требуется подтверждение локального сканера Defender (Код 0)
+            // и отсутствие единичных срабатываний VT или эвристических предупреждений
+            if (!DefenderConfirmedClean || VtHasLowDetections || HeuristicWarnings.Count > 0)
                 return ScanVerdict.UnverifiedWarning;
 
             return ScanVerdict.VerifiedSafe;
@@ -66,7 +72,7 @@ public class SecurityScanReport
     {
         double mb = FileSizeBytes / 1024.0 / 1024.0;
         var sb = new StringBuilder();
-        sb.AppendLine($"🛡️ ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.5)");
+        sb.AppendLine($"🛡️ ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.6)");
         sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         sb.AppendLine($"📄 Файл: {FileName} ({mb:F2} MB)");
         sb.AppendLine($"🌐 Источник: {SourceOrigin}");
@@ -74,30 +80,34 @@ public class SecurityScanReport
             sb.AppendLine($"🔑 SHA-256: {Sha256Hash[..16]}...{Sha256Hash[^16..]}");
         sb.AppendLine();
 
-        sb.AppendLine($"1. Облачная проверка VirusTotal (70+ антивирусов):");
+        sb.AppendLine($"1. Поиск хеша архива в базе VirusTotal:");
         sb.AppendLine($"   {VirusTotalStatus}");
         sb.AppendLine();
 
-        sb.AppendLine($"2. Локальный антивирус (Microsoft Defender + Windows AMSI):");
+        sb.AppendLine($"2. Локальная проверка файла (Microsoft Defender):");
         sb.AppendLine($"   {DefenderStatus}");
         sb.AppendLine();
 
         sb.AppendLine($"3. Проверка на исполняемые файлы (.exe/.dll/.bat/.ps1/.scr):");
         sb.AppendLine(DangerousBinariesFound.Count == 0
-            ? "   ✅ Чисто (включая проверку вложенных архивов)"
+            ? "   ✅ Исполняемых файлов внутри архива не обнаружено"
             : $"   ❌ БЛОКИРОВКА! Найдены исполняемые файлы: {string.Join(", ", DangerousBinariesFound.Take(5))}");
         sb.AppendLine();
 
-        sb.AppendLine($"4. Лексический аудит и деобфускация Lua (Lua: {LuaFilesScanned}, Влож.: {NestedArchivesScanned}, JS: {UiJsFilesCount}):");
+        string amsiInfo = AmsiInitialized
+            ? $"AMSI проверил буферов: {AmsiScriptsScanned}"
+            : "AMSI не инициализирован";
+
+        sb.AppendLine($"4. Статический аудит скриптов (Lua: {LuaFilesScanned}, Влож.: {NestedArchivesScanned}, JS: {UiJsFilesCount} | {amsiInfo}):");
         if (CriticalLuaExploitsFound.Count == 0)
-            sb.AppendLine("   ✅ Критических эксплойтов и вредоносных сигнатур AMSI не найдено");
+            sb.AppendLine("   ✅ Прямых эксплойтов в Lua/JS не обнаружено");
         else
             sb.AppendLine($"   🚨 БЛОКИРОВКА! ОПАСНЫЙ КОД В СКРИПТАХ:\n   • {string.Join("\n   • ", CriticalLuaExploitsFound.Take(5))}");
 
         if (HeuristicWarnings.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"5. Эвристические замечания:");
+            sb.AppendLine($"5. Предупреждения и эвристика:");
             sb.AppendLine($"   ⚠️ {string.Join("\n   ⚠️ ", HeuristicWarnings.Take(5))}");
         }
 
@@ -105,13 +115,13 @@ public class SecurityScanReport
         switch (Verdict)
         {
             case ScanVerdict.VerifiedSafe:
-                sb.AppendLine("✅ ВЕРДИКТ: Подтверждено антивирусом и лексическим анализатором. Угроз нет.");
+                sb.AppendLine("✅ ВЕРДИКТ: Локальная проверка Defender завершена (Код 0), опасных сигнатур в скриптах нет.");
                 break;
             case ScanVerdict.UnverifiedWarning:
-                sb.AppendLine("⚠️ ВЕРДИКТ: Прямых эксплойтов нет, но требуется внимание пользователя.");
+                sb.AppendLine("⚠️ ВЕРДИКТ: Статус НЕ подтверждён полностью (либо есть замечания эвристики / единичные срабатывания). Решение за вами.");
                 break;
             case ScanVerdict.DangerousThreat:
-                sb.AppendLine("⛔ ВЕРДИКТ: УСТАНОВКА ЗАБЛОКИРОВАНА! Обнаружено вредоносное содержимое.");
+                sb.AppendLine("⛔ ВЕРДИКТ: УСТАНОВКА ЗАБЛОКИРОВАНА! Обнаружены явные признаки угрозы.");
                 break;
         }
 
@@ -124,8 +134,8 @@ public class SecurityScannerService
     private const int MaxNestedScanDepth = 3;
     private const long MaxSingleNestedArchiveBytes = 256L * 1024 * 1024;
     private const long MaxTotalNestedQuotaBytes = 512L * 1024 * 1024;
+    private const int VtHardBlockThreshold = 3; // Блокируем намертво от 3 и более срабатываний (1-2 могут быть False Positive)
 
-    // Нативный интерфейс Windows AMSI (работает с любым установленным антивирусом: Kaspersky, ESET, Defender и др.)
     [DllImport("amsi.dll", CharSet = CharSet.Unicode, CallingConvention = CallingConvention.StdCall)]
     private static extern int AmsiInitialize(string appName, out IntPtr amsiContext);
 
@@ -169,6 +179,38 @@ public class SecurityScannerService
         (@"child_process", "Попытка запуска дочернего процесса из JS")
     };
 
+    /// <summary>
+    /// Проверяет подлинность API-ключа VirusTotal перед сохранением (чтобы пользователь случайно не вставил SHA-256 хеш вместо ключа)
+    /// </summary>
+    public async Task<(bool isValid, string message)> ValidateVtApiKeyAsync(string candidateKey)
+    {
+        string clean = candidateKey.Trim();
+        if (clean.Length != 64 || !clean.All(Uri.IsHexDigit))
+            return (false, "Ключ VirusTotal должен состоять ровно из 64 шестнадцатеричных символов.");
+
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            client.DefaultRequestHeaders.Add("x-apikey", clean);
+
+            // Проверяем ключ на эндпоинте пользователя VT API v3
+            using var response = await client.GetAsync($"https://www.virustotal.com/api/v3/users/{clean}");
+            if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                return (false, "Сервер VirusTotal отклонил этот ключ (401 Unauthorized). Возможно, вы случайно скопировали SHA-256 хеш файла вместо API-ключа!");
+            }
+
+            if (response.IsSuccessStatusCode)
+                return (true, "Ключ проверен на сервере VirusTotal и зашифрован через Windows DPAPI!");
+
+            return (false, $"Сервер VirusTotal вернул код {(int)response.StatusCode}.");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Ошибка соединения с VirusTotal: {ex.Message}");
+        }
+    }
+
     public async Task<SecurityScanReport> ScanArchiveAsync(string archivePath, string? sourceDomain = null, string? virusTotalApiKey = null)
     {
         var fi = new FileInfo(archivePath);
@@ -183,10 +225,8 @@ public class SecurityScannerService
         if (!string.IsNullOrEmpty(sourceWarning))
             report.HeuristicWarnings.Add(sourceWarning);
 
-        // 1. Автоматический запрос к облачному API VirusTotal v3 (70+ антивирусов)
         await QueryVirusTotalApiAsync(report, virusTotalApiKey);
 
-        // 2. Локальное сканирование (Microsoft Defender CLI + Windows AMSI + Рекурсивный лексер Lua)
         await Task.Run(() =>
         {
             RunWindowsDefenderScan(archivePath, report);
@@ -194,9 +234,14 @@ public class SecurityScannerService
             IntPtr amsiCtx = IntPtr.Zero;
             try
             {
-                _ = AmsiInitialize("BeamNGModManagerPro", out amsiCtx);
+                int hr = AmsiInitialize("BeamNGModManagerPro", out amsiCtx);
+                report.AmsiInitialized = (hr == 0 && amsiCtx != IntPtr.Zero);
             }
-            catch { amsiCtx = IntPtr.Zero; }
+            catch
+            {
+                report.AmsiInitialized = false;
+                amsiCtx = IntPtr.Zero;
+            }
 
             try
             {
@@ -220,9 +265,6 @@ public class SecurityScannerService
         return report;
     }
 
-    /// <summary>
-    /// Запрос к официальному VirusTotal API v3 по SHA-256 хешу файла
-    /// </summary>
     private static async Task QueryVirusTotalApiAsync(SecurityScanReport report, string? configuredApiKey)
     {
         string? apiKey = !string.IsNullOrWhiteSpace(configuredApiKey)
@@ -231,7 +273,7 @@ public class SecurityScannerService
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            report.VirusTotalStatus = "ℹ️ Ключ VT API не подключён (нажмите «🔑 VT API» в шапке или кнопку «Нет» для веб-проверки)";
+            report.VirusTotalStatus = "ℹ️ Ключ VT API не задан (нажмите кнопку «🔑 VT API» в верхней панели или «Нет» для открытия в браузере)";
             return;
         }
 
@@ -245,22 +287,26 @@ public class SecurityScannerService
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                report.VirusTotalStatus = "ℹ️ VirusTotal API: Архив ранее не загружался в базу VT (уникальный/новый файл)";
+                report.VirusTotalStatus = "ℹ️ Хеш этого архива ещё отсутствует в базе VirusTotal (404 — файл ранее не загружался на VT)";
+                return;
+            }
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                report.VirusTotalStatus = "⚠️ Ошибка 401: Недействительный ключ VirusTotal API (проверьте ключ в «🔑 VT API»)";
                 return;
             }
 
             if (!response.IsSuccessStatusCode)
             {
-                report.VirusTotalStatus = $"⚠️ VirusTotal API вернул статус {(int)response.StatusCode} ({response.ReasonPhrase})";
+                report.VirusTotalStatus = $"⚠️ VirusTotal API вернул статус {(int)response.StatusCode}";
                 return;
             }
 
             string json = await response.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(json);
-            var stats = doc.RootElement
-                .GetProperty("data")
-                .GetProperty("attributes")
-                .GetProperty("last_analysis_stats");
+            var attributes = doc.RootElement.GetProperty("data").GetProperty("attributes");
+            var stats = attributes.GetProperty("last_analysis_stats");
 
             int malicious = stats.TryGetProperty("malicious", out var mProp) ? mProp.GetInt32() : 0;
             int suspicious = stats.TryGetProperty("suspicious", out var sProp) ? sProp.GetInt32() : 0;
@@ -268,30 +314,36 @@ public class SecurityScannerService
             int undetected = stats.TryGetProperty("undetected", out var uProp) ? uProp.GetInt32() : 0;
             int totalEngines = malicious + suspicious + harmless + undetected;
 
-            if (malicious > 0)
+            string analysisDateStr = "неизвестная дата";
+            if (attributes.TryGetProperty("last_analysis_date", out var dateProp) && dateProp.TryGetInt64(out long unixSec))
             {
-                report.VtDetectedThreat = true;
-                report.VtConfirmedClean = false;
-                report.VirusTotalStatus = $"🚨 VirusTotal API: ОБНАРУЖЕНА УГРОЗА! ({malicious} из {totalEngines} антивирусов нашли вирус!)";
+                analysisDateStr = DateTimeOffset.FromUnixTimeSeconds(unixSec).LocalDateTime.ToString("dd.MM.yyyy");
             }
-            else if (suspicious > 0)
+
+            if (malicious >= VtHardBlockThreshold)
             {
-                report.VtConfirmedClean = false;
-                report.VirusTotalStatus = $"⚠️ VirusTotal API: Подозрительный файл ({suspicious} из {totalEngines} антивирусов)";
+                report.VtDetectedHighThreat = true;
+                report.VirusTotalStatus = $"🚨 VirusTotal (анализ от {analysisDateStr}): ОБНАРУЖЕНА УГРОЗА ({malicious} из {totalEngines} движков)!";
+            }
+            else if (malicious > 0 || suspicious > 0)
+            {
+                report.VtHasLowDetections = true;
+                report.HeuristicWarnings.Add($"На VirusTotal есть единичные срабатывания (malicious: {malicious}, suspicious: {suspicious} из {totalEngines}). Проверьте отчёт на сайте VT.");
+                report.VirusTotalStatus = $"⚠️ VirusTotal (анализ от {analysisDateStr}): Единичные срабатывания ({malicious} mal / {suspicious} susp из {totalEngines}) — возможен False Positive";
             }
             else if (totalEngines > 0)
             {
                 report.VtConfirmedClean = true;
-                report.VirusTotalStatus = $"✅ VirusTotal API: Проверено — 0 / {totalEngines} угроз (100% чисто по всем базам!)";
+                report.VirusTotalStatus = $"✅ VirusTotal (кэш анализа от {analysisDateStr}): 0 срабатываний из {totalEngines} движков";
             }
             else
             {
-                report.VirusTotalStatus = "ℹ️ VirusTotal API: Анализ файла ещё не завершён.";
+                report.VirusTotalStatus = "ℹ️ VirusTotal: Статистика анализа пуста.";
             }
         }
         catch (Exception ex)
         {
-            report.VirusTotalStatus = $"⚠️ Не удалось связаться с VirusTotal API: {ex.Message}";
+            report.VirusTotalStatus = $"⚠️ Ошибка запроса к VirusTotal API: {ex.Message}";
         }
     }
 
@@ -397,11 +449,14 @@ public class SecurityScannerService
                     using var reader = new StreamReader(stream);
                     string rawLua = reader.ReadToEnd();
 
-                    // Проверка буфера скрипта через системный антивирус Windows AMSI
-                    if (amsiCtx != IntPtr.Zero && ScanBufferWithAmsi(amsiCtx, rawLua, displayPath))
+                    if (report.AmsiInitialized && amsiCtx != IntPtr.Zero)
                     {
-                        report.AmsiDetectedThreat = true;
-                        report.CriticalLuaExploitsFound.Add($"{Path.GetFileName(entryName)}: Заблокирован системным антивирусом через Windows AMSI!");
+                        report.AmsiScriptsScanned++;
+                        if (ScanBufferWithAmsi(amsiCtx, rawLua, displayPath))
+                        {
+                            report.AmsiDetectedThreat = true;
+                            report.CriticalLuaExploitsFound.Add($"{Path.GetFileName(entryName)}: Срабатывание антивируса через Windows AMSI!");
+                        }
                     }
 
                     string uncommentedLua = StripLuaCommentsWithLexer(rawLua);
@@ -433,10 +488,14 @@ public class SecurityScannerService
                 using var reader = new StreamReader(stream);
                 string jsCode = reader.ReadToEnd();
 
-                if (amsiCtx != IntPtr.Zero && ScanBufferWithAmsi(amsiCtx, jsCode, displayPath))
+                if (report.AmsiInitialized && amsiCtx != IntPtr.Zero)
                 {
-                    report.AmsiDetectedThreat = true;
-                    report.CriticalLuaExploitsFound.Add($"{Path.GetFileName(entryName)} (JS): Заблокирован антивирусом через Windows AMSI!");
+                    report.AmsiScriptsScanned++;
+                    if (ScanBufferWithAmsi(amsiCtx, jsCode, displayPath))
+                    {
+                        report.AmsiDetectedThreat = true;
+                        report.CriticalLuaExploitsFound.Add($"{Path.GetFileName(entryName)} (JS): Срабатывание антивируса через Windows AMSI!");
+                    }
                 }
 
                 foreach (var (pattern, desc) in CriticalJsSignatures)
@@ -457,7 +516,6 @@ public class SecurityScannerService
             byte[] bytes = Encoding.UTF8.GetBytes(content);
             if (bytes.Length == 0) return false;
             int hr = AmsiScanBuffer(amsiCtx, bytes, (uint)bytes.Length, contentName, IntPtr.Zero, out int amsiResult);
-            // AMSI_RESULT_DETECTED = 32768 (0x8000)
             return hr == 0 && amsiResult >= 32768;
         }
         catch
@@ -605,7 +663,7 @@ public class SecurityScannerService
             if (mpCmdRun == null)
             {
                 report.DefenderConfirmedClean = false;
-                report.DefenderStatus = "⚠️ Сканер Microsoft Defender (MpCmdRun.exe) не найден — проверено через Windows AMSI.";
+                report.DefenderStatus = "⚠️ Сканер Microsoft Defender (MpCmdRun.exe) не найден — сам файл архива антивирусом НЕ проверялся.";
                 return;
             }
 
@@ -640,7 +698,7 @@ public class SecurityScannerService
             if (code == 0)
             {
                 report.DefenderConfirmedClean = true;
-                report.DefenderStatus = "✅ Microsoft Defender + AMSI: Угроз не обнаружено (Код 0)";
+                report.DefenderStatus = "✅ Microsoft Defender (MpCmdRun): Архив проверен, угроз не обнаружено (Код 0)";
             }
             else if (code == 2)
             {
