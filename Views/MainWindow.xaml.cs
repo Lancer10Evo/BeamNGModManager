@@ -21,6 +21,47 @@ public partial class MainWindow : Window
     private List<ModItem> _allMods = new();
     private GameProfile? ActiveProfile => CmbProfiles.SelectedItem as GameProfile;
 
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        try
+        {
+            IntPtr hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            int dark = 1;
+            _ = DwmSetWindowAttribute(hwnd, 20, ref dark, sizeof(int)); // DWMWA_USE_IMMERSIVE_DARK_MODE
+            int captionColor = 0x00141111; // Чёрный цвет заголовка #111114
+            _ = DwmSetWindowAttribute(hwnd, 35, ref captionColor, sizeof(int));
+        }
+        catch { }
+    }
+
+    private async void BtnScanSelectedMod_Click(object sender, RoutedEventArgs e)
+    {
+        if (GridMods.SelectedItem is ModItem mod && File.Exists(mod.FullPath))
+        {
+            LblStatus.Text = $"Проверка мода: {mod.FileName}...";
+            var report = await _securityScanner.ScanArchiveAsync(mod.FullPath, null, _pathResolver.Config.GetVtApiKey());
+            LblStatus.Text = _loc.Get("drag_drop_hint");
+            if (MessageBox.Show(report.BuildFormattedSummary() + "\n\nОткрыть страницу хеша этого мода на VirusTotal?",
+                "Отчёт проверки установленного мода", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+            {
+                Process.Start(new ProcessStartInfo(report.VirusTotalUrl) { UseShellExecute = true });
+            }
+        }
+    }
+
+    private async void BtnCopySelectedModHash_Click(object sender, RoutedEventArgs e)
+    {
+        if (GridMods.SelectedItem is ModItem mod && File.Exists(mod.FullPath))
+        {
+            var report = await _securityScanner.ScanArchiveAsync(mod.FullPath, null, "");
+            Clipboard.SetText(report.Sha256Hash);
+            LblStatus.Text = $"SHA-256 скопирован: {report.Sha256Hash}";
+        }
+    }
     public MainWindow()
     {
         InitializeComponent();

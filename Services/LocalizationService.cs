@@ -1,5 +1,6 @@
-using System.IO;
+﻿using System.IO;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 
 namespace BeamNGModManager.Services;
@@ -20,21 +21,19 @@ public class LocalizationService
     {
         try
         {
-            // Если рядом с .exe положить внешний locales.json, программа прочитает его (удобно для кастомных переводов).
-            // Иначе читаем вшитый внутрь .exe ресурс.
             string externalFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locales.json");
             string json;
 
             if (File.Exists(externalFile))
             {
-                json = File.ReadAllText(externalFile);
+                json = File.ReadAllText(externalFile, Encoding.UTF8);
             }
             else
             {
                 var assembly = Assembly.GetExecutingAssembly();
                 using var stream = assembly.GetManifestResourceStream("BeamNGModManager.locales.json");
                 if (stream == null) return;
-                using var reader = new StreamReader(stream);
+                using var reader = new StreamReader(stream, Encoding.UTF8);
                 json = reader.ReadToEnd();
             }
 
@@ -57,7 +56,6 @@ public class LocalizationService
         if (_dictionaries.TryGetValue(CurrentLanguage, out var dict) && dict.TryGetValue(key, out var val))
             return val;
 
-        // Резервный откат на английский, если ключ не найден в выбранном языке
         if (_dictionaries.TryGetValue("en", out var enDict) && enDict.TryGetValue(key, out var enVal))
             return enVal;
 

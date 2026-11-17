@@ -17,7 +17,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- РЯД 0: Верхняя шапка с кнопкой 🔑 VT API -->
+        <!-- РЯД 0: Верхняя шапка -->
         <Border Grid.Row="0" Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}"
                 BorderThickness="1" CornerRadius="12" Padding="14,10" Margin="0,0,0,10">
             <Grid>
@@ -33,19 +33,19 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,18,0">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
                     <Image Source="pack://application:,,,/icon.ico" Width="34" Height="34"
                            VerticalAlignment="Center" Margin="0,0,10,0" RenderOptions.BitmapScalingMode="HighQuality"/>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="BeamModManager" FontWeight="Bold" FontSize="15" Foreground="{StaticResource TextPrimary}"/>
-                        <TextBlock Text="ULTIMATE v2.7" FontWeight="Bold" FontSize="10" Foreground="{StaticResource AccentOrange}"/>
+                        <TextBlock Text="ULTIMATE v2.7.1" FontWeight="Bold" FontSize="10" Foreground="{StaticResource AccentOrange}"/>
                     </StackPanel>
                 </StackPanel>
 
                 <TextBlock x:Name="LblProfile" Grid.Column="1" Text="Профиль:" VerticalAlignment="Center"
                            Foreground="{StaticResource TextSecondary}" FontWeight="SemiBold" Margin="0,0,8,0"/>
 
-                <ComboBox x:Name="CmbProfiles" Grid.Column="2" Height="36" VerticalContentAlignment="Center"
+                <ComboBox x:Name="CmbProfiles" Grid.Column="2" Height="36" MinWidth="240" VerticalContentAlignment="Center"
                           FontSize="13" Margin="0,0,8,0" SelectionChanged="CmbProfiles_SelectionChanged">
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
@@ -70,23 +70,23 @@
                     </ComboBox.ItemTemplate>
                 </ComboBox>
 
-                <Button Grid.Column="3" Content="📂 Папка" Style="{StaticResource ModernButton}"
+                <Button Grid.Column="3" Content="📂 Папка" Style="{StaticResource ModernButton}" Padding="10,7"
                         Margin="0,0,6,0" Click="BtnOpenFolder_Click"/>
 
-                <Button x:Name="BtnAddProfile" Grid.Column="4" Content="Добавить профиль"
-                        Style="{StaticResource ModernButton}" Margin="0,0,6,0" Click="BtnAddProfile_Click"/>
+                <Button x:Name="BtnAddProfile" Grid.Column="4" Content="＋ Профиль"
+                        Style="{StaticResource ModernButton}" Padding="10,7" Margin="0,0,6,0" Click="BtnAddProfile_Click"/>
 
                 <Button x:Name="BtnAutoDetect" Grid.Column="5" Content="Автопоиск"
-                        Style="{StaticResource ModernButton}" Margin="0,0,6,0" Click="BtnAutoDetect_Click"/>
+                        Style="{StaticResource ModernButton}" Padding="10,7" Margin="0,0,6,0" Click="BtnAutoDetect_Click"/>
 
-                <Button Grid.Column="6" Content="🛡️ Лицензия" Style="{StaticResource ModernButton}"
+                <Button Grid.Column="6" Content="🛡️ Лицензия" Style="{StaticResource ModernButton}" Padding="10,7"
                         Margin="0,0,6,0" ToolTip="Диагностика и симулятор Steam / Epic Games" Click="BtnTestLicense_Click"/>
 
-                <Button x:Name="BtnVtApi" Grid.Column="7" Content="🔑 VT API" Style="{StaticResource ModernButton}"
-                        Margin="0,0,10,0" ToolTip="Настроить и проверить ключ VirusTotal API v3 (хранится в зашифрованном виде DPAPI)"
+                <Button x:Name="BtnVtApi" Grid.Column="7" Content="🔑 VT API" Style="{StaticResource ModernButton}" Padding="10,7"
+                        Margin="0,0,8,0" ToolTip="Настроить ключ VirusTotal API v3 (хранится в зашифрованном виде DPAPI)"
                         Click="BtnVtApi_Click"/>
 
-                <ComboBox x:Name="CmbLanguage" Grid.Column="8" Width="72" Height="36"
+                <ComboBox x:Name="CmbLanguage" Grid.Column="8" Width="68" Height="36"
                           VerticalContentAlignment="Center" FontWeight="Bold"
                           SelectionChanged="CmbLanguage_SelectionChanged"/>
             </Grid>
@@ -155,7 +155,7 @@
                     <Button Grid.Column="2" Content="💾 Сохранить" Style="{StaticResource ModernButton}"
                             Padding="10,6" Margin="0,0,6,0" Click="BtnSavePreset_Click"/>
 
-                    <Button Grid.Column="3" Content="🗑️" Style="{StaticResource DangerIconButton}"
+                    <Button Grid.Column="3" Content="✕" Style="{StaticResource DangerIconButton}"
                             Padding="10,6" Margin="0,0,6,0" Click="BtnDeletePreset_Click"/>
 
                     <Button Grid.Column="4" Content="🌐 Режим MP" Style="{StaticResource ModernButton}"
@@ -165,7 +165,7 @@
             </Border>
         </Grid>
 
-        <!-- РЯД 2: Установка с ПК, Мод-Хаб 2.7, Поиск и Фильтры -->
+        <!-- РЯД 2: Установка с ПК, Мод-Хаб, Просторный Поиск и Фильтры -->
         <Grid Grid.Row="2" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
@@ -178,23 +178,23 @@
             </Grid.ColumnDefinitions>
 
             <Button x:Name="BtnInstallMods" Grid.Column="0" Content="＋ Файл с ПК"
-                    Style="{StaticResource PrimaryOrangeButton}" Padding="16,10" Margin="0,0,8,0" Click="BtnInstallMods_Click"/>
+                    Style="{StaticResource PrimaryOrangeButton}" Padding="14,10" Margin="0,0,8,0" Click="BtnInstallMods_Click"/>
 
-            <Button Grid.Column="1" Content="🌐 Мод-Хаб 2.7 (BeamNG / ModLand / PG / Nexus)"
+            <Button Grid.Column="1" Content="🌐 Мод-Хаб (BeamNG / ModLand / PG / Nexus)"
                     Style="{StaticResource ModernButton}" Background="#1E293B" BorderBrush="#3B82F6" Foreground="#60A5FA"
-                    FontWeight="Bold" Padding="14,10" Click="BtnOpenModHub_Click"/>
+                    FontWeight="Bold" Padding="12,10" Click="BtnOpenModHub_Click"/>
 
             <TextBox x:Name="TxtSearch" Grid.Column="2" Style="{StaticResource DarkTextBox}"
-                     Margin="12,0" Height="38" TextChanged="TxtSearch_TextChanged"/>
+                     MinWidth="200" Margin="10,0" Height="38" TextChanged="TxtSearch_TextChanged"/>
 
-            <Button Grid.Column="3" Content="✅ Вкл все" Style="{StaticResource ModernButton}"
+            <Button Grid.Column="3" Content="✓ Вкл все" Style="{StaticResource ModernButton}" Padding="10,8"
                     Margin="0,0,6,0" Click="BtnEnableAll_Click"/>
 
-            <Button Grid.Column="4" Content="⛔ Выкл все" Style="{StaticResource ModernButton}"
+            <Button Grid.Column="4" Content="✕ Выкл все" Style="{StaticResource ModernButton}" Padding="10,8"
                     Margin="0,0,10,0" Click="BtnDisableAll_Click"/>
 
-            <ComboBox x:Name="CmbFilter" Grid.Column="5" Width="185" Height="38" VerticalContentAlignment="Center"
-                      FontSize="13" SelectionChanged="CmbFilter_SelectionChanged" Margin="0,0,14,0">
+            <ComboBox x:Name="CmbFilter" Grid.Column="5" Width="170" Height="38" VerticalContentAlignment="Center"
+                      FontSize="13" SelectionChanged="CmbFilter_SelectionChanged" Margin="0,0,12,0">
                 <ComboBoxItem x:Name="FilterAll" Content="Все моды" IsSelected="True"/>
                 <ComboBoxItem x:Name="FilterActive" Content="Только активные"/>
                 <ComboBoxItem x:Name="FilterDisabled" Content="Отключённые"/>
@@ -206,11 +206,12 @@
             </ComboBox>
 
             <CheckBox x:Name="ChkHardlinks" Grid.Column="6" Content="Hardlinks"
+                      ToolTip="Режим жёстких ссылок NTFS (экономия места на диске)"
                       Style="{StaticResource ToggleSwitchStyle}"
                       VerticalAlignment="Center" Checked="ChkHardlinks_Changed" Unchecked="ChkHardlinks_Changed"/>
         </Grid>
 
-        <!-- РЯД 3: Таблица модов + Инспектор Мода -->
+        <!-- РЯД 3: Таблица модов с контекстным меню ПКМ + Инспектор Мода -->
         <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -225,6 +226,15 @@
                           GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#292933"
                           HeadersVisibility="Column" RowHeight="50" SelectionMode="Single"
                           SelectionChanged="GridMods_SelectionChanged">
+                    <DataGrid.ContextMenu>
+                        <ContextMenu Background="#1C1C22" Foreground="#F4F4F6" BorderBrush="#3E3E4E" BorderThickness="1">
+                            <MenuItem Header="🛡️ Проверить мод антивирусом и сканером Lua" Click="BtnScanSelectedMod_Click"/>
+                            <MenuItem Header="📋 Скопировать SHA-256 хеш в буфер обмена" Click="BtnCopySelectedModHash_Click"/>
+                            <Separator Background="#32323E"/>
+                            <MenuItem Header="📂 Показать файл в Проводнике" Click="BtnRevealSelectedMod_Click"/>
+                            <MenuItem Header="📦 Открыть .ZIP архив" Click="BtnOpenZipArchive_Click"/>
+                        </ContextMenu>
+                    </DataGrid.ContextMenu>
                     <DataGrid.Columns>
                         <DataGridTemplateColumn Header="★" Width="44">
                             <DataGridTemplateColumn.CellTemplate>
@@ -280,6 +290,7 @@
                 </DataGrid>
             </Border>
 
+            <!-- КАРТОЧКА ИНСПЕКТОРА МОДА -->
             <Border Grid.Column="1" Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}"
                     BorderThickness="1" CornerRadius="12" Padding="14">
                 <Grid>
@@ -291,7 +302,7 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <Border Grid.Row="0" Height="168" CornerRadius="10" Background="#141418" BorderBrush="#343442" BorderThickness="1" Margin="0,0,0,12">
+                    <Border Grid.Row="0" Height="158" CornerRadius="10" Background="#141418" BorderBrush="#343442" BorderThickness="1" Margin="0,0,0,10">
                         <Grid>
                             <Border CornerRadius="10">
                                 <Border.Background>
@@ -313,13 +324,13 @@
                                 <TextBlock x:Name="TxtInspectorVersionBadge" Text="v—" FontSize="11" FontWeight="Bold" Foreground="#FF8533"/>
                             </Border>
 
-                            <TextBlock x:Name="TxtInspectorTitle" Text="Выберите мод" FontSize="16" FontWeight="Bold"
+                            <TextBlock x:Name="TxtInspectorTitle" Text="Выберите мод" FontSize="15" FontWeight="Bold"
                                        Foreground="White" VerticalAlignment="Bottom" Margin="12,0,12,10"
                                        TextTrimming="CharacterEllipsis"/>
                         </Grid>
                     </Border>
 
-                    <WrapPanel Grid.Row="1" Margin="0,0,0,12">
+                    <WrapPanel Grid.Row="1" Margin="0,0,0,10">
                         <Border Background="#262633" BorderBrush="#3B3B4F" BorderThickness="1" CornerRadius="6" Padding="8,4" Margin="0,0,6,0">
                             <TextBlock x:Name="BadgeCategory" Text="🚗 Авто" FontSize="11" FontWeight="SemiBold" Foreground="White"/>
                         </Border>
@@ -332,7 +343,7 @@
                     </WrapPanel>
 
                     <StackPanel Grid.Row="2">
-                        <Border Background="#15151A" CornerRadius="8" Padding="10,7" Margin="0,0,0,6">
+                        <Border Background="#15151A" CornerRadius="8" Padding="10,6" Margin="0,0,0,5">
                             <Grid>
                                 <TextBlock Text="Автор" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
                                 <TextBlock x:Name="TxtInspectorAuthor" Text="—" FontSize="12" FontWeight="Bold"
@@ -340,7 +351,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Background="#15151A" CornerRadius="8" Padding="10,7" Margin="0,0,0,6">
+                        <Border Background="#15151A" CornerRadius="8" Padding="10,6" Margin="0,0,0,5">
                             <Grid>
                                 <TextBlock Text="ID в игре" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
                                 <TextBlock x:Name="TxtInspectorGameId" Text="—" FontSize="12" FontWeight="SemiBold"
@@ -348,7 +359,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Background="#15151A" CornerRadius="8" Padding="10,7" Margin="0,0,0,6">
+                        <Border Background="#15151A" CornerRadius="8" Padding="10,6" Margin="0,0,0,5">
                             <Grid>
                                 <TextBlock Text="Конфигураций" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
                                 <TextBlock x:Name="TxtInspectorConfigs" Text="—" FontSize="12" FontWeight="SemiBold"
@@ -356,7 +367,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Background="#15151A" CornerRadius="8" Padding="10,7" Margin="0,0,0,6">
+                        <Border Background="#15151A" CornerRadius="8" Padding="10,6" Margin="0,0,0,5">
                             <Grid>
                                 <TextBlock Text="Размер и дата" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
                                 <TextBlock x:Name="TxtInspectorSizeDate" Text="—" FontSize="11" FontWeight="SemiBold"
@@ -364,7 +375,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Background="#15151A" CornerRadius="8" Padding="10,7">
+                        <Border Background="#15151A" CornerRadius="8" Padding="10,6">
                             <StackPanel>
                                 <TextBlock Text="Имя архива на диске:" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,2"/>
                                 <TextBlock x:Name="TxtInspectorFile" Text="—" FontSize="12" FontWeight="SemiBold"
@@ -374,8 +385,10 @@
                     </StackPanel>
 
                     <StackPanel Grid.Row="4" VerticalAlignment="Bottom">
+                        <Button Content="🛡️ Проверить этот мод сканером" Style="{StaticResource ModernButton}"
+                                HorizontalAlignment="Stretch" Margin="0,0,0,5" Click="BtnScanSelectedMod_Click"/>
                         <Button Content="📂 Показать в Проводнике" Style="{StaticResource ModernButton}"
-                                HorizontalAlignment="Stretch" Margin="0,0,0,6" Click="BtnRevealSelectedMod_Click"/>
+                                HorizontalAlignment="Stretch" Margin="0,0,0,5" Click="BtnRevealSelectedMod_Click"/>
                         <Button Content="📦 Открыть .ZIP архив" Style="{StaticResource ModernButton}"
                                 HorizontalAlignment="Stretch" Click="BtnOpenZipArchive_Click"/>
                     </StackPanel>
@@ -383,7 +396,7 @@
             </Border>
         </Grid>
 
-        <!-- РЯД 4: Нижняя панель -->
+        <!-- РЯД 4: Нижняя панель (без битых символов) -->
         <Border Grid.Row="4" Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}"
                 BorderThickness="1" CornerRadius="12" Padding="14,10" Margin="0,10,0,0">
             <Grid>
@@ -398,7 +411,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Button x:Name="BtnClearCache" Grid.Column="0" Content="🧹 Кэш игры"
+                <Button x:Name="BtnClearCache" Grid.Column="0" Content="✦ Кэш игры"
                         Style="{StaticResource ModernButton}" Margin="0,0,6,0" Click="BtnClearCache_Click"/>
 
                 <Button Grid.Column="1" Content="🌐 Кэш MP"
@@ -407,10 +420,10 @@
                 <Button x:Name="BtnCheckConflicts" Grid.Column="2" Content="⚡ Конфликты"
                         Style="{StaticResource ModernButton}" Margin="0,0,6,0" Click="BtnCheckConflicts_Click"/>
 
-                <Button Grid.Column="3" Content="🩺 Здоровье"
+                <Button Grid.Column="3" Content="✚ Здоровье"
                         Style="{StaticResource ModernButton}" Margin="0,0,6,0" Click="BtnHealthCheck_Click"/>
 
-                <Button x:Name="BtnCheckUpdates" Grid.Column="4" Content="🔄 Обновления"
+                <Button x:Name="BtnCheckUpdates" Grid.Column="4" Content="↻ Обновления"
                         Style="{StaticResource ModernButton}" Click="BtnCheckUpdates_Click"/>
 
                 <TextBlock x:Name="LblStatus" Grid.Column="5"
@@ -429,4 +442,3 @@
         </Border>
     </Grid>
 </Window>
-
