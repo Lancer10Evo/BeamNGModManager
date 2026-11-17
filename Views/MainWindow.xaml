@@ -38,7 +38,7 @@
                            VerticalAlignment="Center" Margin="0,0,10,0" RenderOptions.BitmapScalingMode="HighQuality"/>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="BeamModManager" FontWeight="Bold" FontSize="15" Foreground="{StaticResource TextPrimary}"/>
-                        <TextBlock Text="ULTIMATE v2.7.1" FontWeight="Bold" FontSize="10" Foreground="{StaticResource AccentOrange}"/>
+                        <TextBlock Text="ULTIMATE v2.8.0" FontWeight="Bold" FontSize="10" Foreground="{StaticResource AccentOrange}"/>
                     </StackPanel>
                 </StackPanel>
 

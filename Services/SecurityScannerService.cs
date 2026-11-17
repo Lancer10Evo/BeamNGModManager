@@ -72,7 +72,7 @@ public class SecurityScanReport
     {
         double mb = FileSizeBytes / 1024.0 / 1024.0;
         var sb = new StringBuilder();
-        sb.AppendLine($"🛡️ ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.7)");
+        sb.AppendLine($"🛡️ ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.8)");
         sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         sb.AppendLine($"📄 Файл: {FileName} ({mb:F2} MB)");
         sb.AppendLine($"🌐 Источник: {SourceOrigin}");
@@ -414,7 +414,7 @@ public class SecurityScannerService
                     continue;
                 }
 
-                nestedBudgetUsed += entry.Size;
+                
                 report.NestedArchivesScanned++;
 
                 string tempNestedFile = Path.Combine(Path.GetTempPath(), "BeamNG_NestedScan_" + Guid.NewGuid().ToString("N") + ext);
@@ -429,7 +429,11 @@ public class SecurityScannerService
                         bufferSize: 81920,
                         FileOptions.DeleteOnClose);
 
-                    entryStream.CopyTo(tempFs);
+                    long singleArchiveRead = 0;
+                    SmartInstallerService.CopyStreamWithRealLimit(entryStream, tempFs, ref singleArchiveRead, MaxSingleNestedArchiveBytes);
+                    nestedBudgetUsed += singleArchiveRead;
+                    if (nestedBudgetUsed > MaxTotalNestedQuotaBytes)
+                        throw new InvalidOperationException("Превышена суммарная квота реального чтения вложенных архивов (512 MB).");
                     tempFs.Position = 0;
                     ScanArchiveStreamRecursive(tempFs, Path.GetFileName(entryName), report, currentDepth + 1, ref nestedBudgetUsed, amsiCtx);
                 }
@@ -474,6 +478,8 @@ public class SecurityScannerService
                             report.CriticalLuaExploitsFound.Add($"{Path.GetFileName(entryName)}: {desc}");
                         }
                     }
+
+                    AnalyzeLuaAstSemantics(normalizedLua, Path.GetFileName(entryName), report.CriticalLuaExploitsFound, report.HeuristicWarnings);
 
                     foreach (var (pattern, desc) in HeuristicLuaWarningSignatures)
                     {
@@ -529,6 +535,103 @@ public class SecurityScannerService
         }
     }
 
+        /// <summary>
+    /// Структурный AST/Token анализатор Lua:
+    /// 1. Отслеживает создание алиасов опасных таблиц (например: local my_os = os; my_os.execute(...)).
+    /// 2. Обнаруживает нелитеральные (динамические) обращения к os[var], io[var], _G[var], _ENV[var], package[var], ffi[var].
+    /// 3. Обнаруживает вызовы load(var) / loadstring(var) / dofile(var) с нелитеральными (динамическими) аргументами.
+    /// </summary>
+    public static void AnalyzeLuaAstSemantics(string normalizedCode, string fileName, List<string> criticalOut, List<string> warningsOut)
+    {
+        var sensitiveRoots = new HashSet<string>(StringComparer.Ordinal) { "os", "io", "package", "ffi", "debug", "_G", "_ENV" };
+        var dangerousMembers = new HashSet<string>(StringComparer.Ordinal) { "execute", "popen", "loadlib", "load", "cdef" };
+
+        // 1. Отслеживаем алиасы вида: [local] alias = os | _G.os | io | ffi | _G | _ENV
+        foreach (Match m in Regex.Matches(normalizedCode, @"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:_G\.|_ENV\.)?(os|io|package|ffi|debug|_G|_ENV)\b"))
+        {
+            string aliasName = m.Groups[1].Value;
+            string targetRoot = m.Groups[2].Value;
+            sensitiveRoots.Add(aliasName);
+            warningsOut.Add($"{fileName}: Создание алиаса системной таблицы ({aliasName} = {targetRoot})");
+        }
+
+        // 2. Проверяем все обращения к корням и их алиасам
+        foreach (string root in sensitiveRoots)
+        {
+            string escapedRoot = Regex.Escape(root);
+
+            // Проверка вызова опасного метода через алиас: alias.execute / alias.popen
+            foreach (string member in dangerousMembers)
+            {
+                if (Regex.IsMatch(normalizedCode, $@"\b{escapedRoot}\s*\.\s*{member}\b"))
+                {
+                    criticalOut.Add($"{fileName}: Вызов опасного метода {root}.{member} (через алиас или напрямую)");
+                }
+            }
+
+            // Проверка нелитеральной скобочной индексации: os[var], _G[var], _ENV[var], alias[var]
+            // (так как строковые литералы ["str"] уже превращены в .str на этапе нормализации, любые оставшиеся [...] — это динамические переменные/выражения!)
+            if (Regex.IsMatch(normalizedCode, $@"\b{escapedRoot}\s*\[[^\]]+\]"))
+            {
+                if (root is "os" or "io" or "ffi" or "package")
+                    criticalOut.Add($"{fileName}: Динамическая нелитеральная индексация системной библиотеки {root}[...]");
+                else
+                    warningsOut.Add($"{fileName}: Динамическая нелитеральная индексация глобального окружения {root}[...]");
+            }
+        }
+
+        // 3. Проверка вызовов load / loadstring / dofile / loadfile с динамическими (не-литеральными) аргументами
+        foreach (Match m in Regex.Matches(normalizedCode, @"(?<![a-zA-Z0-9_\.])(load|loadstring|dofile|loadfile)\s*\(\s*([^)]+)\)"))
+        {
+            string func = m.Groups[1].Value;
+            string arg = m.Groups[2].Value.Trim();
+            if (!arg.StartsWith("\"") && !arg.StartsWith("'") && !arg.StartsWith("["))
+            {
+                warningsOut.Add($"{fileName}: Вызов {func}({arg}) с динамическим (нелитеральным) аргументом");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Встроенный набор модульных автотестов (запускается в CI и при диагностике)
+    /// </summary>
+    public static (bool passed, string report) RunSelfTestSuite()
+    {
+        var failures = new List<string>();
+
+        // Тест 1: Комментарии внутри строковых литералов не должны обрезать следующий за ними код
+        string sample1 = "local s = \"--[[\"; os.execute(\"calc\"); local e = \"]]\"";
+        string lex1 = StripLuaCommentsWithLexer(sample1);
+        if (!lex1.Contains("os.execute"))
+            failures.Add("Test 1 Failed: Lexer stripped code after '--[[' inside string literal.");
+
+        // Тест 2: Деобфускация hex/dec эскейпов, склейки строк и скобок
+        string sample2 = "_G[\"\\111\\115\"][\"exe\" .. \"cute\"](\"cmd\")";
+        string norm2 = NormalizeAndDeobfuscateLua(StripLuaCommentsWithLexer(sample2));
+        if (!norm2.Contains("_G.os.execute"))
+            failures.Add($"Test 2 Failed: Expected '_G.os.execute', got '{norm2}'.");
+
+        // Тест 3: AST-отслеживание алиасов (local x = os; x.execute()) и нелитеральной индексации os[k]
+        var crit3 = new List<string>();
+        var warn3 = new List<string>();
+        string sample3 = "local my_sys = os; my_sys.execute('calc'); local dyn = io[secret_key]";
+        AnalyzeLuaAstSemantics(NormalizeAndDeobfuscateLua(StripLuaCommentsWithLexer(sample3)), "test.lua", crit3, warn3);
+        if (crit3.Count < 2)
+            failures.Add($"Test 3 Failed: AST analyzer missed alias or dynamic indexing (found {crit3.Count}).");
+
+        // Тест 4: Легальный скрипт электрики BeamNG не должен давать ложных критических срабатываний
+        var crit4 = new List<string>();
+        var warn4 = new List<string>();
+        string benignBeamNg = "--[[ BeamNG vehicle controller ]] local M = {} function M.updateGFX(dt) electrics.values.throttle = math.min(1, dt * 2) end return M";
+        string norm4 = NormalizeAndDeobfuscateLua(StripLuaCommentsWithLexer(benignBeamNg));
+        AnalyzeLuaAstSemantics(norm4, "controller.lua", crit4, warn4);
+        if (crit4.Count > 0 || warn4.Count > 0)
+            failures.Add("Test 4 Failed: False positive on benign BeamNG vehicle script.");
+
+        return (failures.Count == 0, failures.Count == 0
+            ? $"Все автотесты безопасности (4/4: Lexer, Deobfuscator, AST Alias/Dynamic Indexing, Benign BeamNG Script) успешно пройдены!"
+            : "Ошибки автотестов:\n" + string.Join("\n", failures));
+    }
     public static string StripLuaCommentsWithLexer(string code)
     {
         var sb = new StringBuilder(code.Length);
@@ -749,6 +852,8 @@ public class SecurityScannerService
 
         return File.Exists(defaultPath) ? defaultPath : null;
     }
+
+    public static async Task<string> ComputeSha256OnlyAsync(string filePath) => await Task.Run(() => ComputeSha256(filePath));
 
     private static string ComputeSha256(string filePath)
     {

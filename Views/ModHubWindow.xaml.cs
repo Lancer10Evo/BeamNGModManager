@@ -60,7 +60,7 @@ public partial class ModHubWindow : Window
             Browser.CoreWebView2.SourceChanged += (_, _) =>
             {
                 TxtUrl.Text = Browser.Source?.ToString() ?? "";
-                _isInsideTrustedPortalSession = Browser.Source != null && IsPortalDomain(Browser.Source.Host);
+                _isInsideTrustedPortalSession = Browser.Source != null && (IsPortalDomain(Browser.Source.Host) || (_isInsideTrustedPortalSession && IsMirrorDomain(Browser.Source.Host)));
             };
 
             Browser.CoreWebView2.DownloadStarting += CoreWebView2_DownloadStarting;

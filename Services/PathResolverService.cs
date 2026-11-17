@@ -10,8 +10,25 @@ public class PathResolverService
 {
     public const string SteamAppId = "284160"; // Официальный ID BeamNG.drive в Steam
 
-    private readonly string _configPath = Path.Combine(
-        AppDomain.CurrentDomain.BaseDirectory, "modmanager_config.json");
+    private readonly string _configPath = ResolveWritableConfigPath();
+
+    private static string ResolveWritableConfigPath()
+    {
+        string localCandidate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "modmanager_config.json");
+        try
+        {
+            string testFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".write_test_" + Guid.NewGuid().ToString("N")[..6]);
+            File.WriteAllText(testFile, "ok");
+            File.Delete(testFile);
+            return localCandidate;
+        }
+        catch
+        {
+            string appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BeamModManagerUltimate");
+            Directory.CreateDirectory(appDataDir);
+            return Path.Combine(appDataDir, "modmanager_config.json");
+        }
+    }
 
     public AppConfig Config { get; private set; } = new();
 

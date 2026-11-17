@@ -57,13 +57,20 @@ public partial class MainWindow : Window
     {
         if (GridMods.SelectedItem is ModItem mod && File.Exists(mod.FullPath))
         {
-            var report = await _securityScanner.ScanArchiveAsync(mod.FullPath, null, "");
-            Clipboard.SetText(report.Sha256Hash);
-            LblStatus.Text = $"SHA-256 скопирован: {report.Sha256Hash}";
+            string hash = await SecurityScannerService.ComputeSha256OnlyAsync(mod.FullPath);
+            Clipboard.SetText(hash);
+            LblStatus.Text = $"SHA-256 скопирован: {hash}";
         }
     }
     public MainWindow()
     {
+                if (Environment.GetCommandLineArgs().Contains("--self-test"))
+        {
+            var (passed, testReport) = SecurityScannerService.RunSelfTestSuite();
+            Console.WriteLine(testReport);
+            Environment.Exit(passed ? 0 : 1);
+            return;
+        }
         InitializeComponent();
         InitializeApp();
     }

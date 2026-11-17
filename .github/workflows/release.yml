@@ -1,4 +1,4 @@
-﻿name: Build & Auto-Release
+﻿name: Build, Test & Auto-Release
 
 on:
   push:
@@ -23,19 +23,32 @@ jobs:
       - name: Publish Single-File EXE
         run: dotnet publish -c Release -r win-x64 --self-contained true
 
-      - name: Read Version from csproj
-        id: get_version
+      - name: Run Security & Lexer/AST Self-Test Suite
+        shell: pwsh
+        run: |
+          .\bin\Release\net8.0-windows\win-x64\publish\BeamNGModManager.exe --self-test
+          if ($LASTEXITCODE -ne 0) { throw "Security self-tests failed!" }
+
+      - name: Read Version and Compute SHA-256
+        id: meta
         shell: pwsh
         run: |
           [xml]$csproj = Get-Content .\BeamNGModManager.csproj
           $ver = $csproj.Project.PropertyGroup.Version | Select-Object -First 1
+          $hash = (Get-FileHash .\bin\Release\net8.0-windows\win-x64\publish\BeamNGModManager.exe -Algorithm SHA256).Hash
           Write-Output "version=v$ver" >> $env:GITHUB_OUTPUT
+          Write-Output "sha256=$hash" >> $env:GITHUB_OUTPUT
 
-      - name: Create or Update GitHub Release
+      - name: Create or Update GitHub Release with SHA-256
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.get_version.outputs.version }}
-          name: "BeamNG.drive Mod Manager ${{ steps.get_version.outputs.version }}"
+          tag_name: ${{ steps.meta.outputs.version }}
+          name: "BeamModManager Ultimate ${{ steps.meta.outputs.version }}"
+          body: |
+            ### BeamModManager Ultimate ${{ steps.meta.outputs.version }}
+            - **File:** `BeamNGModManager.exe` (Portable Single-File x64)
+            - **SHA-256 Checksum:** `${{ steps.meta.outputs.sha256 }}`
+            - **CI Security Self-Tests:** Passed (Lexer, Deobfuscator, AST Alias/Indexing, Benign Script Check)
           generate_release_notes: true
           files: bin/Release/net8.0-windows/win-x64/publish/BeamNGModManager.exe
         env:

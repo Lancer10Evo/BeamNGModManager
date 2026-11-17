@@ -8,7 +8,7 @@ namespace BeamNGModManager.Services;
 public class SmartInstallerService
 {
     private const int MaxRecursionDepth = 3;
-    private const long MaxExtractedBytesLimit = 4L * 1024 * 1024 * 1024; // 4 GB лимит
+    private const long MaxExtractedBytesLimit = 4L * 1024 * 1024 * 1024; // 4 GB реальных прочитанных байт
 
     private static readonly HashSet<string> ValidBeamNgDirs = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -27,7 +27,8 @@ public class SmartInstallerService
                 if (!File.Exists(path)) continue;
                 try
                 {
-                    bool installedAny = ProcessSingleArchive(path, targetModsDir, result.InstalledFiles, currentDepth: 0);
+                    long totalBytesExtracted = 0;
+                    bool installedAny = ProcessSingleArchive(path, targetModsDir, result.InstalledFiles, 0, ref totalBytesExtracted);
                     if (!installedAny)
                         result.InvalidFiles.Add(Path.GetFileName(path));
                 }
@@ -40,7 +41,12 @@ public class SmartInstallerService
         });
     }
 
-    private bool ProcessSingleArchive(string archivePath, string targetModsDir, List<string> installedCollector, int currentDepth)
+    private bool ProcessSingleArchive(
+        string archivePath,
+        string targetModsDir,
+        List<string> installedCollector,
+        int currentDepth,
+        ref long totalBytesExtracted)
     {
         if (currentDepth > MaxRecursionDepth)
             return false;
@@ -61,22 +67,15 @@ public class SmartInstallerService
 
         try
         {
-            long extractedBytes = 0;
-
             using (var archive = ArchiveFactory.OpenArchive(archivePath))
             {
                 foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
                 {
                     if (string.IsNullOrWhiteSpace(entry.Key)) continue;
 
-                    extractedBytes += entry.Size;
-                    if (extractedBytes > MaxExtractedBytesLimit)
-                        throw new InvalidOperationException("Превышен безопасный лимит распаковки архива (4 ГБ).");
-
-                    // Строгая защита от Zip-Slip (Path Traversal CVE-2026-44788)
                     string destFilePath = Path.GetFullPath(Path.Combine(tempDir, entry.Key));
                     if (!destFilePath.StartsWith(fullTempRoot, StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidOperationException("Заблокирована попытка выхода файла за пределы временной папки (Zip-Slip).");
+                        throw new InvalidOperationException("Zip-Slip path traversal blocked.");
 
                     string? destDir = Path.GetDirectoryName(destFilePath);
                     if (!string.IsNullOrEmpty(destDir))
@@ -84,7 +83,7 @@ public class SmartInstallerService
 
                     using var inStream = entry.OpenEntryStream();
                     using var outStream = File.Create(destFilePath);
-                    inStream.CopyTo(outStream);
+                    CopyStreamWithRealLimit(inStream, outStream, ref totalBytesExtracted, MaxExtractedBytesLimit);
                 }
             }
 
@@ -102,7 +101,7 @@ public class SmartInstallerService
                 }
                 else
                 {
-                    if (ProcessSingleArchive(nestedZip, targetModsDir, installedCollector, currentDepth + 1))
+                    if (ProcessSingleArchive(nestedZip, targetModsDir, installedCollector, currentDepth + 1, ref totalBytesExtracted))
                         foundValidMod = true;
                 }
             }
@@ -134,6 +133,20 @@ public class SmartInstallerService
         }
     }
 
+    public static void CopyStreamWithRealLimit(Stream input, Stream output, ref long totalBytesCounter, long maxBytesAllowed)
+    {
+        byte[] buffer = new byte[81920];
+        int read;
+        while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            totalBytesCounter += read;
+            if (totalBytesCounter > maxBytesAllowed)
+                throw new InvalidOperationException($"Превышен лимит реального объёма распаковки ({maxBytesAllowed / 1024 / 1024} MB).");
+
+            output.Write(buffer, 0, read);
+        }
+    }
+
     private bool IsCleanDirectZipMod(string zipPath)
     {
         try
@@ -160,10 +173,7 @@ public class SmartInstallerService
 
             return hasValidRootDir && !hasNestedArchives;
         }
-        catch
-        {
-            return false;
-        }
+        catch { return false; }
     }
 
     public bool ValidateZipFile(string zipPath)
@@ -179,10 +189,7 @@ public class SmartInstallerService
             }
             return false;
         }
-        catch
-        {
-            return false;
-        }
+        catch { return false; }
     }
 
     private string? FindBeamNgStructureRoot(string extractedRoot)
@@ -195,7 +202,6 @@ public class SmartInstallerService
             if (HasBeamNgSystemFolders(subDir))
                 return subDir;
         }
-
         return null;
     }
 
@@ -239,7 +245,6 @@ public class SmartInstallerService
             disabledCandidate = Path.Combine(disabledDir, numberedName);
             counter++;
         }
-
         return candidatePath;
     }
 }

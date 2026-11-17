@@ -65,7 +65,16 @@ Download the latest compiled **`BeamNGModManager.exe`** binary from the **[Relea
 ### 3. Build Instructions
 <pre><code>dotnet publish -c Release -r win-x64 --self-contained true</code></pre>
 
-### 4. License and Restrictions (All Rights Reserved)
+### 4. Privacy and Zero Telemetry Policy
+**BeamModManager Ultimate** contains **zero telemetry, analytics, or background tracking**. Outbound network connections occur strictly upon explicit user action:
+1. Checking for application releases via the GitHub Releases API (`api.github.com`).
+2. Querying SHA-256 archive hashes against the VirusTotal v3 API (`virustotal.com`) when configured by the user.
+3. Browsing whitelisted modification repositories inside the optional Mod Hub window.
+
+### 5. License and Licensing History (All Rights Reserved)
+- **Versions 1.0.0 – 2.1.0:** Originally published under the MIT License.
+- **Versions 2.2.0 and later:** Transitioned to a **Proprietary Source-Available License (All Rights Reserved)** concurrent with the rebranding to **BeamModManager Ultimate**.
+
 Copyright (c) 2026 **Lancer10Evo**. All Rights Reserved.
 The source code is provided strictly for inspection and security auditing (**Source-Available**). Copying, forking, creating derivative works, commercial use, monetization, or unauthorized redistribution is strictly prohibited. See [LICENSE](LICENSE) for full legal terms.
 
