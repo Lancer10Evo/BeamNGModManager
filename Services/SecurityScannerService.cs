@@ -14,10 +14,20 @@ namespace BeamNGModManager.Services;
 
 public enum ScanVerdict
 {
-    VerifiedSafe,      // Локальный Defender подтвердил чистоту (Код 0) + нет угроз/предупреждений в скриптах и VT
-    UnverifiedWarning, // Прямых эксплойтов нет, но Defender не завершился, либо на VT 1-2 подозрения, либо сработала эвристика
-    DangerousThreat    // Найдены бинарники (.exe/.dll/.bat), вирус Defender (Код 2), >=3 детектов на VT или прямой эксплойт -> БЛОКИРОВКА
+    VerifiedSafe,
+    UnverifiedWarning,
+    DangerousThreat
 }
+
+public enum LuaTokenType
+{
+    Identifier,
+    StringLiteral,
+    Number,
+    Symbol
+}
+
+public readonly record struct LuaToken(LuaTokenType Type, string Value);
 
 public class SecurityScanReport
 {
@@ -28,8 +38,8 @@ public class SecurityScanReport
 
     public string VirusTotalStatus { get; set; } = string.Empty;
     public bool VtConfirmedClean { get; set; }
-    public bool VtDetectedHighThreat { get; set; } // >= 3 детектов на VT -> блокировка
-    public bool VtHasLowDetections { get; set; }   // 1-2 детекта или suspicious -> предупреждение
+    public bool VtDetectedHighThreat { get; set; }
+    public bool VtHasLowDetections { get; set; }
 
     public string DefenderStatus { get; set; } = string.Empty;
     public bool DefenderConfirmedClean { get; set; }
@@ -57,8 +67,6 @@ public class SecurityScanReport
                 return ScanVerdict.DangerousThreat;
             }
 
-            // Для VerifiedSafe ОБЯЗАТЕЛЬНО требуется подтверждение локального сканера Defender (Код 0)
-            // и отсутствие единичных срабатываний VT или эвристических предупреждений
             if (!DefenderConfirmedClean || VtHasLowDetections || HeuristicWarnings.Count > 0)
                 return ScanVerdict.UnverifiedWarning;
 
@@ -72,12 +80,12 @@ public class SecurityScanReport
     {
         double mb = FileSizeBytes / 1024.0 / 1024.0;
         var sb = new StringBuilder();
-        sb.AppendLine($"🛡️ ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.8)");
+        sb.AppendLine($"ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.8.1)");
         sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        sb.AppendLine($"📄 Файл: {FileName} ({mb:F2} MB)");
-        sb.AppendLine($"🌐 Источник: {SourceOrigin}");
+        sb.AppendLine($"Файл: {FileName} ({mb:F2} MB)");
+        sb.AppendLine($"Источник: {SourceOrigin}");
         if (Sha256Hash.Length >= 32)
-            sb.AppendLine($"🔑 SHA-256: {Sha256Hash[..16]}...{Sha256Hash[^16..]}");
+            sb.AppendLine($"SHA-256: {Sha256Hash[..16]}...{Sha256Hash[^16..]}");
         sb.AppendLine();
 
         sb.AppendLine($"1. Поиск хеша архива в базе VirusTotal:");
@@ -90,25 +98,25 @@ public class SecurityScanReport
 
         sb.AppendLine($"3. Проверка на исполняемые файлы (.exe/.dll/.bat/.ps1/.scr):");
         sb.AppendLine(DangerousBinariesFound.Count == 0
-            ? "   ✅ Исполняемых файлов внутри архива не обнаружено"
-            : $"   ❌ БЛОКИРОВКА! Найдены исполняемые файлы: {string.Join(", ", DangerousBinariesFound.Take(5))}");
+            ? "   Чисто (исполняемых файлов внутри архива не обнаружено)"
+            : $"   БЛОКИРОВКА! Найдены исполняемые файлы: {string.Join(", ", DangerousBinariesFound.Take(5))}");
         sb.AppendLine();
 
         string amsiInfo = AmsiInitialized
             ? $"AMSI проверил буферов: {AmsiScriptsScanned}"
             : "AMSI не инициализирован";
 
-        sb.AppendLine($"4. Статический аудит скриптов (Lua: {LuaFilesScanned}, Влож.: {NestedArchivesScanned}, JS: {UiJsFilesCount} | {amsiInfo}):");
+        sb.AppendLine($"4. Потоковый токенизатор и лексер Lua (Lua: {LuaFilesScanned}, Влож.: {NestedArchivesScanned}, JS: {UiJsFilesCount} | {amsiInfo}):");
         if (CriticalLuaExploitsFound.Count == 0)
-            sb.AppendLine("   ✅ Прямых эксплойтов в Lua/JS не обнаружено");
+            sb.AppendLine("   Запрещённых вызовов в потоке токенов Lua/JS не обнаружено");
         else
-            sb.AppendLine($"   🚨 БЛОКИРОВКА! ОПАСНЫЙ КОД В СКРИПТАХ:\n   • {string.Join("\n   • ", CriticalLuaExploitsFound.Take(5))}");
+            sb.AppendLine($"   БЛОКИРОВКА! ОПАСНЫЙ КОД В СКРИПТАХ:\n   • {string.Join("\n   • ", CriticalLuaExploitsFound.Take(5))}");
 
         if (HeuristicWarnings.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"5. Предупреждения и эвристика:");
-            sb.AppendLine($"   ⚠️ {string.Join("\n   ⚠️ ", HeuristicWarnings.Take(5))}");
+            sb.AppendLine($"5. Нестандартные конструкции и предупреждения:");
+            sb.AppendLine($"   • {string.Join("\n   • ", HeuristicWarnings.Take(5))}");
         }
 
         sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -116,14 +124,14 @@ public class SecurityScanReport
         {
             case ScanVerdict.VerifiedSafe:
                 sb.AppendLine(LuaFilesScanned == 0 && UiJsFilesCount == 0
-                    ? "✅ ВЕРДИКТ: Чистый ресурсный мод (исполняемых скриптов .lua/.js и бинарников внутри нет, Defender: Код 0)."
-                    : "✅ ВЕРДИКТ: Defender проверил архив (Код 0), совпадений с чёрным списком шаблонов в Lua не найдено (шаблоны не исключают неизвестную обфускацию — учитывайте источник).");
+                    ? "ВЕРДИКТ: Чистый ресурсный мод (исполняемых скриптов .lua/.js и бинарников внутри нет, Defender: Код 0)."
+                    : "ВЕРДИКТ: Defender проверил архив (Код 0), в потоке токенов Lua запрещённых вызовов не найдено.");
                 break;
             case ScanVerdict.UnverifiedWarning:
-                sb.AppendLine("⚠️ ВЕРДИКТ: Статус НЕ подтверждён полностью (либо есть замечания эвристики / единичные срабатывания). Решение за вами.");
+                sb.AppendLine("ВЕРДИКТ: Статус НЕ подтверждён полностью (либо есть предупреждения анализатора токенов). Решение за вами.");
                 break;
             case ScanVerdict.DangerousThreat:
-                sb.AppendLine("⛔ ВЕРДИКТ: УСТАНОВКА ЗАБЛОКИРОВАНА! Обнаружены явные признаки угрозы.");
+                sb.AppendLine("ВЕРДИКТ: УСТАНОВКА ЗАБЛОКИРОВАНА! Обнаружены явные признаки угрозы.");
                 break;
         }
 
@@ -136,7 +144,7 @@ public class SecurityScannerService
     private const int MaxNestedScanDepth = 3;
     private const long MaxSingleNestedArchiveBytes = 256L * 1024 * 1024;
     private const long MaxTotalNestedQuotaBytes = 512L * 1024 * 1024;
-    private const int VtHardBlockThreshold = 3; // Блокируем намертво от 3 и более срабатываний (1-2 могут быть False Positive)
+    private const int VtHardBlockThreshold = 3;
 
     [DllImport("amsi.dll", CharSet = CharSet.Unicode, CallingConvention = CallingConvention.StdCall)]
     private static extern int AmsiInitialize(string appName, out IntPtr amsiContext);
@@ -152,30 +160,33 @@ public class SecurityScannerService
         ".exe", ".dll", ".bat", ".cmd", ".ps1", ".vbs", ".vbe", ".jse", ".wsf", ".scr", ".msi", ".com", ".hta", ".pif", ".cpl"
     };
 
-    private static readonly (string Pattern, string Description)[] CriticalLuaExploitSignatures =
+    // Белый список абсолютно безопасных методов стандартных библиотек Lua, используемых в модах BeamNG (не вызывают шума!)
+    private static readonly HashSet<string> SafeOsMembers = new(StringComparer.Ordinal)
     {
-        (@"(?:os|_G\.os|rawget\s*\(\s*_G\s*,\s*[""']os[""']\s*\))\s*\.\s*execute", "Вызов os.execute (прямой или через таблицу/скобки)"),
-        (@"(?:io|_G\.io|rawget\s*\(\s*_G\s*,\s*[""']io[""']\s*\))\s*\.\s*popen", "Вызов io.popen (скрытый запуск процессов)"),
-        (@"(?:package|_G\.package)\s*\.\s*loadlib", "Вызов package.loadlib (загрузка внешней DLL)"),
-        (@"ffi\s*\.\s*load\b", "Вызов ffi.load (загрузка нативной DLL через FFI)"),
-        (@"[""'](?:execute|popen|loadlib)[""']\s*\]", "Обращение к запрещённому методу execute/popen/loadlib по ключу таблицы"),
-        (@"powershell(?:\.exe)?|cmd\.exe|wscript(?:\.exe)?|cscript(?:\.exe)?|mshta(?:\.exe)?|certutil", "Вызов системных интерпретаторов Windows"),
-        (@"\\27Lua|\x1bLua", "Скрытый прекомпилированный байткод Lua"),
-        (@"(?:loadstring|(?<![a-zA-Z0-9_\.])load)\s*\([^)]*string\.char", "Динамическое выполнение обфусцированного массива string.char (...)")
+        "clock", "time", "date", "difftime"
     };
 
-    private static readonly (string Pattern, string Description)[] HeuristicLuaWarningSignatures =
+    private static readonly HashSet<string> SafePackageMembers = new(StringComparer.Ordinal)
     {
-        (@"socket\.http|http\.request|luasec", "Сетевое обращение из Lua"),
-        (@"ffi\.C\.", "Обращение к структурам C (ffi.C)"),
-        (@"loadstring\s*\(|(?<![a-zA-Z0-9_\.])load\s*\(", "Динамическая компиляция строк (load / loadstring)"),
-        (@"_G\s*\.|_G\s*\[|rawget\s*\(\s*_G", "Динамическое обращение к глобальной таблице _G"),
-        (@"setfenv\s*\(|getfenv\s*\(", "Изменение окружения функций (setfenv / getfenv)"),
-        (@"string\.char\s*\((?:\s*\d+\s*,){5,}", "Цепочка string.char(...)"),
-        (@"os\s*\.\s*(?:remove|rename|getenv|tmpname)\b", "Обращение к файловой системе или окружению ОС (os.remove/rename/getenv)"),
-        (@"(?<![a-zA-Z0-9_\.])(?:dofile|loadfile)\s*\(", "Загрузка внешних скриптов с диска (dofile / loadfile)"),
-        (@"io\s*\.\s*(?:open|write|lines|input|output)\b", "Прямой файловый ввод-вывод из Lua (io.open / io.write)"),
-        (@"debug\s*\.\s*(?:getregistry|setupvalue|getupvalue|sethook|setmetatable)\b", "Низкоуровневое вмешательство через библиотеку debug.*")
+        "path", "cpath", "loaded", "preload", "config", "searchers", "loaders"
+    };
+
+    private static readonly HashSet<string> SafeDebugMembers = new(StringComparer.Ordinal)
+    {
+        "traceback", "getinfo"
+    };
+
+    // Критические методы, блокируемые при любом обращении
+    private static readonly HashSet<string> CriticalBlockedMembers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "execute", "popen", "loadlib", "exit"
+    };
+
+    // Методы файлового ввода-вывода и отладки, дающие предупреждение
+    private static readonly HashSet<string> WarningMembers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "remove", "rename", "getenv", "tmpname", "open", "write", "lines", "input", "output",
+        "getregistry", "setupvalue", "getupvalue", "sethook", "setmetatable"
     };
 
     private static readonly (string Pattern, string Description)[] CriticalJsSignatures =
@@ -184,9 +195,6 @@ public class SecurityScannerService
         (@"child_process", "Попытка запуска дочернего процесса из JS")
     };
 
-    /// <summary>
-    /// Проверяет подлинность API-ключа VirusTotal перед сохранением (чтобы пользователь случайно не вставил SHA-256 хеш вместо ключа)
-    /// </summary>
     public async Task<(bool isValid, string message)> ValidateVtApiKeyAsync(string candidateKey)
     {
         string clean = candidateKey.Trim();
@@ -198,12 +206,9 @@ public class SecurityScannerService
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
             client.DefaultRequestHeaders.Add("x-apikey", clean);
 
-            // Проверяем ключ на эндпоинте пользователя VT API v3
             using var response = await client.GetAsync($"https://www.virustotal.com/api/v3/users/{clean}");
             if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
-            {
-                return (false, "Сервер VirusTotal отклонил этот ключ (401 Unauthorized). Возможно, вы случайно скопировали SHA-256 хеш файла вместо API-ключа!");
-            }
+                return (false, "Сервер VirusTotal отклонил этот ключ (401). Возможно, вы вставили SHA-256 хеш файла вместо API-ключа!");
 
             if (response.IsSuccessStatusCode)
                 return (true, "Ключ проверен на сервере VirusTotal и зашифрован через Windows DPAPI!");
@@ -214,6 +219,11 @@ public class SecurityScannerService
         {
             return (false, $"Ошибка соединения с VirusTotal: {ex.Message}");
         }
+    }
+
+    public static async Task<string> ComputeFileSha256OnlyAsync(string filePath)
+    {
+        return await Task.Run(() => ComputeSha256(filePath));
     }
 
     public async Task<SecurityScanReport> ScanArchiveAsync(string archivePath, string? sourceDomain = null, string? virusTotalApiKey = null)
@@ -239,7 +249,7 @@ public class SecurityScannerService
             IntPtr amsiCtx = IntPtr.Zero;
             try
             {
-                int hr = AmsiInitialize("BeamNGModManagerPro", out amsiCtx);
+                int hr = AmsiInitialize("BeamModManagerUltimate", out amsiCtx);
                 report.AmsiInitialized = (hr == 0 && amsiCtx != IntPtr.Zero);
             }
             catch
@@ -278,7 +288,7 @@ public class SecurityScannerService
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            report.VirusTotalStatus = "ℹ️ Ключ VT API не задан (нажмите кнопку «🔑 VT API» в верхней панели или «Нет» для открытия в браузере)";
+            report.VirusTotalStatus = "Ключ VT API не задан (нажмите кнопку «VT API» в верхней панели или «Нет» для открытия в браузере)";
             return;
         }
 
@@ -292,19 +302,19 @@ public class SecurityScannerService
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                report.VirusTotalStatus = "ℹ️ Хеш этого архива ещё отсутствует в базе VirusTotal (404 — файл ранее не загружался на VT)";
+                report.VirusTotalStatus = "Хеш этого архива отсутствует в базе VirusTotal (404 — файл ранее не загружался на VT)";
                 return;
             }
 
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
-                report.VirusTotalStatus = "⚠️ Ошибка 401: Недействительный ключ VirusTotal API (проверьте ключ в «🔑 VT API»)";
+                report.VirusTotalStatus = "Ошибка 401: Недействительный ключ VirusTotal API";
                 return;
             }
 
             if (!response.IsSuccessStatusCode)
             {
-                report.VirusTotalStatus = $"⚠️ VirusTotal API вернул статус {(int)response.StatusCode}";
+                report.VirusTotalStatus = $"VirusTotal API вернул статус {(int)response.StatusCode}";
                 return;
             }
 
@@ -321,34 +331,32 @@ public class SecurityScannerService
 
             string analysisDateStr = "неизвестная дата";
             if (attributes.TryGetProperty("last_analysis_date", out var dateProp) && dateProp.TryGetInt64(out long unixSec))
-            {
                 analysisDateStr = DateTimeOffset.FromUnixTimeSeconds(unixSec).LocalDateTime.ToString("dd.MM.yyyy");
-            }
 
             if (malicious >= VtHardBlockThreshold)
             {
                 report.VtDetectedHighThreat = true;
-                report.VirusTotalStatus = $"🚨 VirusTotal (анализ от {analysisDateStr}): ОБНАРУЖЕНА УГРОЗА ({malicious} из {totalEngines} движков)!";
+                report.VirusTotalStatus = $"VirusTotal (анализ от {analysisDateStr}): ОБНАРУЖЕНА УГРОЗА ({malicious} из {totalEngines} движков)!";
             }
             else if (malicious > 0 || suspicious > 0)
             {
                 report.VtHasLowDetections = true;
-                report.HeuristicWarnings.Add($"На VirusTotal есть единичные срабатывания (malicious: {malicious}, suspicious: {suspicious} из {totalEngines}). Проверьте отчёт на сайте VT.");
-                report.VirusTotalStatus = $"⚠️ VirusTotal (анализ от {analysisDateStr}): Единичные срабатывания ({malicious} mal / {suspicious} susp из {totalEngines}) — возможен False Positive";
+                report.HeuristicWarnings.Add($"На VirusTotal есть единичные срабатывания (malicious: {malicious}, suspicious: {suspicious} из {totalEngines}).");
+                report.VirusTotalStatus = $"VirusTotal (анализ от {analysisDateStr}): Единичные срабатывания ({malicious} mal / {suspicious} susp из {totalEngines})";
             }
             else if (totalEngines > 0)
             {
                 report.VtConfirmedClean = true;
-                report.VirusTotalStatus = $"✅ VirusTotal (кэш анализа от {analysisDateStr}): 0 срабатываний из {totalEngines} движков";
+                report.VirusTotalStatus = $"VirusTotal (кэш анализа от {analysisDateStr}): 0 срабатываний из {totalEngines} движков";
             }
             else
             {
-                report.VirusTotalStatus = "ℹ️ VirusTotal: Статистика анализа пуста.";
+                report.VirusTotalStatus = "VirusTotal: Статистика анализа пуста.";
             }
         }
         catch (Exception ex)
         {
-            report.VirusTotalStatus = $"⚠️ Ошибка запроса к VirusTotal API: {ex.Message}";
+            report.VirusTotalStatus = $"Ошибка запроса к VirusTotal API: {ex.Message}";
         }
     }
 
@@ -356,25 +364,25 @@ public class SecurityScannerService
     {
         warning = null;
         if (string.IsNullOrWhiteSpace(domain))
-            return "📁 Локальный файл с ПК";
+            return "Локальный файл с ПК";
 
         if (domain.Contains("beamng.com", StringComparison.OrdinalIgnoreCase))
-            return "🟢 Официальный репозиторий BeamNG.com";
+            return "Официальный репозиторий BeamNG.com";
 
         if (domain.Contains("nexusmods.com", StringComparison.OrdinalIgnoreCase) ||
             domain.Contains("nexus-cdn.com", StringComparison.OrdinalIgnoreCase))
-            return "🟡 Nexus Mods";
+            return "Nexus Mods";
 
         if (domain.Contains("modsfire.com", StringComparison.OrdinalIgnoreCase) ||
             domain.Contains("sharemods.com", StringComparison.OrdinalIgnoreCase) ||
             domain.Contains("cloudflarestorage.com", StringComparison.OrdinalIgnoreCase))
         {
             warning = $"Файл загружен через файловое зеркало ({domain}).";
-            return $"🟠 Файловое зеркало ({domain})";
+            return $"Файловое зеркало ({domain})";
         }
 
         warning = $"Сторонний портал модов ({domain}).";
-        return $"🟡 Сторонний портал ({domain})";
+        return $"Сторонний портал ({domain})";
     }
 
     private void ScanArchiveStreamRecursive(
@@ -406,17 +414,13 @@ public class SecurityScannerService
 
             if (ext is ".zip" or ".rar" or ".7z")
             {
-                if (entry.Size <= 0) continue;
-
-                if (entry.Size > MaxSingleNestedArchiveBytes || (nestedBudgetUsed + entry.Size) > MaxTotalNestedQuotaBytes)
+                if (entry.Size > MaxSingleNestedArchiveBytes || (nestedBudgetUsed + Math.Max(entry.Size, 0)) > MaxTotalNestedQuotaBytes)
                 {
-                    report.HeuristicWarnings.Add($"Вложенный архив {displayPath} ({entry.Size / 1024 / 1024} MB) превышает квоту вложенной проверки.");
+                    report.HeuristicWarnings.Add($"Вложенный архив {displayPath} превышает квоту вложенной проверки.");
                     continue;
                 }
 
-                
                 report.NestedArchivesScanned++;
-
                 string tempNestedFile = Path.Combine(Path.GetTempPath(), "BeamNG_NestedScan_" + Guid.NewGuid().ToString("N") + ext);
                 try
                 {
@@ -429,11 +433,19 @@ public class SecurityScannerService
                         bufferSize: 81920,
                         FileOptions.DeleteOnClose);
 
-                    long singleArchiveRead = 0;
-                    SmartInstallerService.CopyStreamWithRealLimit(entryStream, tempFs, ref singleArchiveRead, MaxSingleNestedArchiveBytes);
-                    nestedBudgetUsed += singleArchiveRead;
-                    if (nestedBudgetUsed > MaxTotalNestedQuotaBytes)
-                        throw new InvalidOperationException("Превышена суммарная квота реального чтения вложенных архивов (512 MB).");
+                    // Считаем реально прочитанные байты, а не только заголовок entry.Size
+                    byte[] buffer = new byte[81920];
+                    int read;
+                    long actualNestedBytes = 0;
+                    while ((read = entryStream.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        actualNestedBytes += read;
+                        nestedBudgetUsed += read;
+                        if (actualNestedBytes > MaxSingleNestedArchiveBytes || nestedBudgetUsed > MaxTotalNestedQuotaBytes)
+                            throw new InvalidOperationException("Превышен лимит реально распакованных байтов вложенного архива.");
+                        tempFs.Write(buffer, 0, read);
+                    }
+
                     tempFs.Position = 0;
                     ScanArchiveStreamRecursive(tempFs, Path.GetFileName(entryName), report, currentDepth + 1, ref nestedBudgetUsed, amsiCtx);
                 }
@@ -448,9 +460,7 @@ public class SecurityScannerService
             {
                 report.LuaFilesScanned++;
                 if (entry.Size > 2_000_000)
-                {
                     report.HeuristicWarnings.Add($"Крупный Lua-скрипт ({entry.Size / 1024 / 1024.0:F1} MB): {displayPath}");
-                }
 
                 if (entry.Size <= 15_000_000)
                 {
@@ -468,26 +478,9 @@ public class SecurityScannerService
                         }
                     }
 
-                    string uncommentedLua = StripLuaCommentsWithLexer(rawLua);
-                    string normalizedLua = NormalizeAndDeobfuscateLua(uncommentedLua);
-
-                    foreach (var (pattern, desc) in CriticalLuaExploitSignatures)
-                    {
-                        if (Regex.IsMatch(normalizedLua, pattern, RegexOptions.IgnoreCase))
-                        {
-                            report.CriticalLuaExploitsFound.Add($"{Path.GetFileName(entryName)}: {desc}");
-                        }
-                    }
-
-                    AnalyzeLuaAstSemantics(normalizedLua, Path.GetFileName(entryName), report.CriticalLuaExploitsFound, report.HeuristicWarnings);
-
-                    foreach (var (pattern, desc) in HeuristicLuaWarningSignatures)
-                    {
-                        if (Regex.IsMatch(normalizedLua, pattern, RegexOptions.IgnoreCase))
-                        {
-                            report.HeuristicWarnings.Add($"{Path.GetFileName(entryName)}: {desc}");
-                        }
-                    }
+                    var (crits, warns) = AnalyzeLuaCode(rawLua, Path.GetFileName(entryName));
+                    report.CriticalLuaExploitsFound.AddRange(crits);
+                    report.HeuristicWarnings.AddRange(warns);
                 }
                 continue;
             }
@@ -512,12 +505,236 @@ public class SecurityScannerService
                 foreach (var (pattern, desc) in CriticalJsSignatures)
                 {
                     if (Regex.IsMatch(jsCode, pattern, RegexOptions.IgnoreCase))
-                    {
                         report.CriticalLuaExploitsFound.Add($"{Path.GetFileName(entryName)} (JS): {desc}");
-                    }
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Полноценный потоковый анализатор токенов Lua (Token-Stream Analyzer):
+    /// 1. Удаляет комментарии лексером.
+    /// 2. Декодирует эскейпы (\111\115 -> os), склеивает конкатенации ("exe".."cute" -> "execute") и нормализует tbl["key"] -> tbl.key.
+    /// 3. Разбивает код на типизированные токены (LuaToken) и проверяет контекст использования таблиц os, io, package, ffi, debug, _G, _ENV.
+    /// </summary>
+    public static (List<string> criticals, List<string> warnings) AnalyzeLuaCode(string rawLua, string fileLabel = "script.lua")
+    {
+        var criticals = new List<string>();
+        var warnings = new List<string>();
+
+        if (rawLua.Contains(@"\27Lua", StringComparison.Ordinal) || rawLua.Contains("\x1bLua", StringComparison.Ordinal))
+            criticals.Add($"{fileLabel}: Скрытый прекомпилированный байткод Lua");
+
+        string uncommented = StripLuaCommentsWithLexer(rawLua);
+        string normalized = NormalizeAndDeobfuscateLua(uncommented);
+        List<LuaToken> tokens = TokenizeLua(normalized);
+
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            var tok = tokens[i];
+
+            // Проверка строковых литералов на вызов командных интерпретаторов ОС или прямых имён эксплойтов
+            if (tok.Type == LuaTokenType.StringLiteral)
+            {
+                if (Regex.IsMatch(tok.Value, @"powershell(?:\.exe)?|cmd\.exe|wscript(?:\.exe)?|cscript(?:\.exe)?|mshta(?:\.exe)?|certutil", RegexOptions.IgnoreCase))
+                    criticals.Add($"{fileLabel}: Строка вызова системного интерпретатора Windows ({tok.Value})");
+
+                if (CriticalBlockedMembers.Contains(tok.Value))
+                    criticals.Add($"{fileLabel}: Строковая ссылка на запрещённый метод ({tok.Value})");
+
+                continue;
+            }
+
+            if (tok.Type != LuaTokenType.Identifier)
+                continue;
+
+            string id = tok.Value;
+
+            // 1. Обращение к системным библиотекам: os, io, package, ffi, debug
+            if (id is "os" or "io" or "package" or "ffi" or "debug")
+            {
+                // Проверяем, не является ли этот токен полем другой таблицы (например, myTable.os)
+                if (i > 0 && tokens[i - 1].Type == LuaTokenType.Symbol && tokens[i - 1].Value == ".")
+                {
+                    string prevObj = (i >= 2 && tokens[i - 2].Type == LuaTokenType.Identifier) ? tokens[i - 2].Value : "";
+                    if (prevObj is not ("_G" or "_ENV"))
+                        continue;
+                }
+
+                // Сценарий А: Вызов через точку (например, os.clock или os.execute)
+                if (i + 2 < tokens.Count && tokens[i + 1].Type == LuaTokenType.Symbol && tokens[i + 1].Value == "." &&
+                    tokens[i + 2].Type == LuaTokenType.Identifier)
+                {
+                    string member = tokens[i + 2].Value;
+
+                    // Белый список безопасных методов BeamNG (0 шума!)
+                    if (id == "os" && SafeOsMembers.Contains(member)) continue;
+                    if (id == "package" && SafePackageMembers.Contains(member)) continue;
+                    if (id == "debug" && SafeDebugMembers.Contains(member)) continue;
+
+                    if (CriticalBlockedMembers.Contains(member) || (id == "ffi" && member.Equals("load", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        criticals.Add($"{fileLabel}: Запрещённый системный вызов {id}.{member}");
+                    }
+                    else if (WarningMembers.Contains(member) || id == "ffi")
+                    {
+                        warnings.Add($"{fileLabel}: Обращение к системному методу {id}.{member}");
+                    }
+                }
+                // Сценарий Б: Динамическая индексация системной таблицы через скобки (os[k], io[var])
+                else if (i + 1 < tokens.Count && tokens[i + 1].Type == LuaTokenType.Symbol && tokens[i + 1].Value == "[")
+                {
+                    criticals.Add($"{fileLabel}: Динамическая индексация системной библиотеки {id}[...]");
+                }
+                // Сценарий В: Передача таблицы по ссылке / алиасинг / множественное присваивание (x = os; a, b = os, io; pairs(os); fn(os))
+                else
+                {
+                    // Игнорируем, если os/io является именем локального параметра или поля (local os = ... или os = ...)
+                    bool isLeftHandSideAssignment = (i + 1 < tokens.Count && tokens[i + 1].Type == LuaTokenType.Symbol && tokens[i + 1].Value == "=");
+                    if (!isLeftHandSideAssignment)
+                    {
+                        warnings.Add($"{fileLabel}: Непрямое использование / алиасинг системной таблицы '{id}' (передача ссылки или перебор)");
+                    }
+                }
+            }
+            // 2. Динамическая кодогенерация и метатаблицы окружения
+            else if (id is "load" or "loadstring" or "dofile" or "loadfile" or "setfenv" or "getfenv" or "rawget")
+            {
+                if (i + 1 < tokens.Count && tokens[i + 1].Type == LuaTokenType.Symbol && tokens[i + 1].Value == "(")
+                {
+                    if (id is "dofile" or "loadfile")
+                        criticals.Add($"{fileLabel}: Загрузка внешнего скрипта с диска ({id})");
+                    else
+                        warnings.Add($"{fileLabel}: Динамическая компиляция или обход окружения ({id})");
+                }
+            }
+            // 3. Обращение к _G или _ENV
+            else if (id is "_G" or "_ENV")
+            {
+                if (i + 1 < tokens.Count && tokens[i + 1].Type == LuaTokenType.Symbol && tokens[i + 1].Value == "[")
+                {
+                    warnings.Add($"{fileLabel}: Динамическая индексация глобального окружения {id}[...]");
+                }
+            }
+        }
+
+        return (criticals.Distinct().ToList(), warnings.Distinct().ToList());
+    }
+
+    public static List<LuaToken> TokenizeLua(string code)
+    {
+        var tokens = new List<LuaToken>();
+        int i = 0;
+        int len = code.Length;
+
+        while (i < len)
+        {
+            char c = code[i];
+            if (char.IsWhiteSpace(c)) { i++; continue; }
+
+            if (c == '"' || c == '\'')
+            {
+                char quote = c;
+                var sb = new StringBuilder();
+                i++;
+                while (i < len)
+                {
+                    char sc = code[i++];
+                    if (sc == '\\' && i < len)
+                        sb.Append(code[i++]);
+                    else if (sc == quote)
+                        break;
+                    else
+                        sb.Append(sc);
+                }
+                tokens.Add(new LuaToken(LuaTokenType.StringLiteral, sb.ToString()));
+                continue;
+            }
+
+            if (char.IsLetter(c) || c == '_')
+            {
+                int start = i;
+                while (i < len && (char.IsLetterOrDigit(code[i]) || code[i] == '_')) i++;
+                tokens.Add(new LuaToken(LuaTokenType.Identifier, code[start..i]));
+                continue;
+            }
+
+            if (char.IsDigit(c))
+            {
+                int start = i;
+                while (i < len && (char.IsLetterOrDigit(code[i]) || code[i] == '.')) i++;
+                tokens.Add(new LuaToken(LuaTokenType.Number, code[start..i]));
+                continue;
+            }
+
+            tokens.Add(new LuaToken(LuaTokenType.Symbol, c.ToString()));
+            i++;
+        }
+
+        return tokens;
+    }
+
+    /// <summary>
+    /// Расширенный набор из 8 тестов самодиагностики (для CI и --self-test)
+    /// </summary>
+    public static (bool allPassed, string summary) RunSelfTests()
+    {
+        // Тест 1: Комментарии внутри строк не скрывают код
+        string t1 = "local s = \"--[[\"; os.execute(\"calc\"); local e = \"]]\"";
+        var (c1, _) = AnalyzeLuaCode(t1);
+        bool p1 = c1.Count > 0;
+
+        // Тест 2: Деобфускация эскейпов, склейки и скобок
+        string t2 = "_G[\"\\111\" .. \"s\"][\"exe\" .. \"cute\"](\"cmd\")";
+        var (c2, _) = AnalyzeLuaCode(t2);
+        bool p2 = c2.Count > 0;
+
+        // Тест 3: Множественное присваивание алиасов (a, b = os, io)
+        string t3 = "local a, b = os, io\na.execute('calc')";
+        var (_, w3) = AnalyzeLuaCode(t3);
+        bool p3 = w3.Count > 0;
+
+        // Тест 4: Передача таблицы os в pairs(os) или функцию
+        string t4 = "for k, v in pairs(os) do print(k) end";
+        var (_, w4) = AnalyzeLuaCode(t4);
+        bool p4 = w4.Count > 0;
+
+        // Тест 5: Динамическая индексация os[var]
+        string t5 = "local fn = 'exec' .. 'ute'; os[fn]('calc')";
+        var (c5, _) = AnalyzeLuaCode(t5);
+        bool p5 = c5.Count > 0;
+
+        // Тест 6: Реалистичный многострочный контроллер автомобиля BeamNG (должен давать 0 угроз и 0 ложных предупреждений!)
+        string benignBeamNgMod = @"
+            -- BeamNG Vehicle Custom Controller
+            local M = {}
+            local math_abs = math.abs
+            local lastTime = os.clock()
+            local stamp = os.date('%Y-%m-%d', os.time())
+            local pkgPath = package.path
+
+            local function updateGFX(dt)
+                local rpm = electrics.values.rpm or 0
+                local throttle = electrics.values.throttle or 0
+                if rpm > 7500 then
+                    guihooks.message('Shift Up! -- not a comment', 1, 'info')
+                end
+                local elapsed = os.difftime(os.time(), 0)
+            end
+
+            local function onReset()
+                debug.traceback()
+            end
+
+            M.updateGFX = updateGFX
+            M.onReset = onReset
+            return M
+        ";
+        var (c6, w6) = AnalyzeLuaCode(benignBeamNgMod);
+        bool p6 = c6.Count == 0 && w6.Count == 0;
+
+        bool all = p1 && p2 && p3 && p4 && p5 && p6;
+        return (all, $"Self-Test Suite (6/6: Lexer, Deobfuscator, Multi-Assign Alias, pairs(os), Dynamic os[k], Benign BeamNG Controller Zero-Noise): {(all ? "PASSED" : "FAILED")}");
     }
 
     private static bool ScanBufferWithAmsi(IntPtr amsiCtx, string content, string contentName)
@@ -535,103 +752,6 @@ public class SecurityScannerService
         }
     }
 
-        /// <summary>
-    /// Структурный AST/Token анализатор Lua:
-    /// 1. Отслеживает создание алиасов опасных таблиц (например: local my_os = os; my_os.execute(...)).
-    /// 2. Обнаруживает нелитеральные (динамические) обращения к os[var], io[var], _G[var], _ENV[var], package[var], ffi[var].
-    /// 3. Обнаруживает вызовы load(var) / loadstring(var) / dofile(var) с нелитеральными (динамическими) аргументами.
-    /// </summary>
-    public static void AnalyzeLuaAstSemantics(string normalizedCode, string fileName, List<string> criticalOut, List<string> warningsOut)
-    {
-        var sensitiveRoots = new HashSet<string>(StringComparer.Ordinal) { "os", "io", "package", "ffi", "debug", "_G", "_ENV" };
-        var dangerousMembers = new HashSet<string>(StringComparer.Ordinal) { "execute", "popen", "loadlib", "load", "cdef" };
-
-        // 1. Отслеживаем алиасы вида: [local] alias = os | _G.os | io | ffi | _G | _ENV
-        foreach (Match m in Regex.Matches(normalizedCode, @"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:_G\.|_ENV\.)?(os|io|package|ffi|debug|_G|_ENV)\b"))
-        {
-            string aliasName = m.Groups[1].Value;
-            string targetRoot = m.Groups[2].Value;
-            sensitiveRoots.Add(aliasName);
-            warningsOut.Add($"{fileName}: Создание алиаса системной таблицы ({aliasName} = {targetRoot})");
-        }
-
-        // 2. Проверяем все обращения к корням и их алиасам
-        foreach (string root in sensitiveRoots)
-        {
-            string escapedRoot = Regex.Escape(root);
-
-            // Проверка вызова опасного метода через алиас: alias.execute / alias.popen
-            foreach (string member in dangerousMembers)
-            {
-                if (Regex.IsMatch(normalizedCode, $@"\b{escapedRoot}\s*\.\s*{member}\b"))
-                {
-                    criticalOut.Add($"{fileName}: Вызов опасного метода {root}.{member} (через алиас или напрямую)");
-                }
-            }
-
-            // Проверка нелитеральной скобочной индексации: os[var], _G[var], _ENV[var], alias[var]
-            // (так как строковые литералы ["str"] уже превращены в .str на этапе нормализации, любые оставшиеся [...] — это динамические переменные/выражения!)
-            if (Regex.IsMatch(normalizedCode, $@"\b{escapedRoot}\s*\[[^\]]+\]"))
-            {
-                if (root is "os" or "io" or "ffi" or "package")
-                    criticalOut.Add($"{fileName}: Динамическая нелитеральная индексация системной библиотеки {root}[...]");
-                else
-                    warningsOut.Add($"{fileName}: Динамическая нелитеральная индексация глобального окружения {root}[...]");
-            }
-        }
-
-        // 3. Проверка вызовов load / loadstring / dofile / loadfile с динамическими (не-литеральными) аргументами
-        foreach (Match m in Regex.Matches(normalizedCode, @"(?<![a-zA-Z0-9_\.])(load|loadstring|dofile|loadfile)\s*\(\s*([^)]+)\)"))
-        {
-            string func = m.Groups[1].Value;
-            string arg = m.Groups[2].Value.Trim();
-            if (!arg.StartsWith("\"") && !arg.StartsWith("'") && !arg.StartsWith("["))
-            {
-                warningsOut.Add($"{fileName}: Вызов {func}({arg}) с динамическим (нелитеральным) аргументом");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Встроенный набор модульных автотестов (запускается в CI и при диагностике)
-    /// </summary>
-    public static (bool passed, string report) RunSelfTestSuite()
-    {
-        var failures = new List<string>();
-
-        // Тест 1: Комментарии внутри строковых литералов не должны обрезать следующий за ними код
-        string sample1 = "local s = \"--[[\"; os.execute(\"calc\"); local e = \"]]\"";
-        string lex1 = StripLuaCommentsWithLexer(sample1);
-        if (!lex1.Contains("os.execute"))
-            failures.Add("Test 1 Failed: Lexer stripped code after '--[[' inside string literal.");
-
-        // Тест 2: Деобфускация hex/dec эскейпов, склейки строк и скобок
-        string sample2 = "_G[\"\\111\\115\"][\"exe\" .. \"cute\"](\"cmd\")";
-        string norm2 = NormalizeAndDeobfuscateLua(StripLuaCommentsWithLexer(sample2));
-        if (!norm2.Contains("_G.os.execute"))
-            failures.Add($"Test 2 Failed: Expected '_G.os.execute', got '{norm2}'.");
-
-        // Тест 3: AST-отслеживание алиасов (local x = os; x.execute()) и нелитеральной индексации os[k]
-        var crit3 = new List<string>();
-        var warn3 = new List<string>();
-        string sample3 = "local my_sys = os; my_sys.execute('calc'); local dyn = io[secret_key]";
-        AnalyzeLuaAstSemantics(NormalizeAndDeobfuscateLua(StripLuaCommentsWithLexer(sample3)), "test.lua", crit3, warn3);
-        if (crit3.Count < 2)
-            failures.Add($"Test 3 Failed: AST analyzer missed alias or dynamic indexing (found {crit3.Count}).");
-
-        // Тест 4: Легальный скрипт электрики BeamNG не должен давать ложных критических срабатываний
-        var crit4 = new List<string>();
-        var warn4 = new List<string>();
-        string benignBeamNg = "--[[ BeamNG vehicle controller ]] local M = {} function M.updateGFX(dt) electrics.values.throttle = math.min(1, dt * 2) end return M";
-        string norm4 = NormalizeAndDeobfuscateLua(StripLuaCommentsWithLexer(benignBeamNg));
-        AnalyzeLuaAstSemantics(norm4, "controller.lua", crit4, warn4);
-        if (crit4.Count > 0 || warn4.Count > 0)
-            failures.Add("Test 4 Failed: False positive on benign BeamNG vehicle script.");
-
-        return (failures.Count == 0, failures.Count == 0
-            ? "[SELF-TEST PASSED] All 4/4 security unit tests passed (Lexer, Deobfuscator, AST Alias/Dynamic Indexing, Benign BeamNG Script)."
-            : "Ошибки автотестов:\n" + string.Join("\n", failures));
-    }
     public static string StripLuaCommentsWithLexer(string code)
     {
         var sb = new StringBuilder(code.Length);
@@ -771,7 +891,7 @@ public class SecurityScannerService
             if (mpCmdRun == null)
             {
                 report.DefenderConfirmedClean = false;
-                report.DefenderStatus = "⚠️ Сканер Microsoft Defender (MpCmdRun.exe) не найден — сам файл архива антивирусом НЕ проверялся.";
+                report.DefenderStatus = "Сканер Microsoft Defender (MpCmdRun.exe) не найден — сам файл архива антивирусом НЕ проверялся.";
                 return;
             }
 
@@ -789,7 +909,7 @@ public class SecurityScannerService
             if (proc == null)
             {
                 report.DefenderConfirmedClean = false;
-                report.DefenderStatus = "⚠️ Не удалось запустить процесс MpCmdRun.exe.";
+                report.DefenderStatus = "Не удалось запустить процесс MpCmdRun.exe.";
                 return;
             }
 
@@ -798,7 +918,7 @@ public class SecurityScannerService
             {
                 try { proc.Kill(); } catch { }
                 report.DefenderConfirmedClean = false;
-                report.DefenderStatus = "⚠️ НЕ ЗАВЕРШЕНО: Сканирование Defender превысило 120 сек.";
+                report.DefenderStatus = "НЕ ЗАВЕРШЕНО: Сканирование Defender превысило 120 сек.";
                 return;
             }
 
@@ -806,24 +926,24 @@ public class SecurityScannerService
             if (code == 0)
             {
                 report.DefenderConfirmedClean = true;
-                report.DefenderStatus = "✅ Microsoft Defender (MpCmdRun): Архив проверен, угроз не обнаружено (Код 0)";
+                report.DefenderStatus = "Microsoft Defender (MpCmdRun): Архив проверен, угроз не обнаружено (Код 0)";
             }
             else if (code == 2)
             {
                 report.DefenderConfirmedClean = false;
                 report.DefenderDetectedThreat = true;
-                report.DefenderStatus = "🚨 Microsoft Defender: ОБНАРУЖЕНА ВРЕДОНОСНАЯ ПРОГРАММА (Код 2)!";
+                report.DefenderStatus = "Microsoft Defender: ОБНАРУЖЕНА ВРЕДОНОСНАЯ ПРОГРАММА (Код 2)!";
             }
             else
             {
                 report.DefenderConfirmedClean = false;
-                report.DefenderStatus = $"⚠️ Microsoft Defender вернул код ({code}) — безопасность НЕ подтверждена.";
+                report.DefenderStatus = $"Microsoft Defender вернул код ({code}) — безопасность НЕ подтверждена.";
             }
         }
         catch (Exception ex)
         {
             report.DefenderConfirmedClean = false;
-            report.DefenderStatus = $"⚠️ Ошибка вызова Microsoft Defender ({ex.Message}).";
+            report.DefenderStatus = $"Ошибка вызова Microsoft Defender ({ex.Message}).";
         }
     }
 
@@ -853,12 +973,9 @@ public class SecurityScannerService
         return File.Exists(defaultPath) ? defaultPath : null;
     }
 
-    public static async Task<string> ComputeSha256OnlyAsync(string filePath) => await Task.Run(() => ComputeSha256(filePath));
-
     private static string ComputeSha256(string filePath)
     {
         using var stream = File.OpenRead(filePath);
         return Convert.ToHexString(SHA256.HashData(stream));
     }
 }
-

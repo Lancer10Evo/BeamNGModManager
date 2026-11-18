@@ -23,12 +23,12 @@ jobs:
       - name: Publish Single-File EXE
         run: dotnet publish -c Release -r win-x64 --self-contained true
 
-      - name: Run Security & Lexer/AST Self-Test Suite
+      - name: Run Security & Token-Stream Self-Test Suite
         shell: pwsh
         run: |
-          $out = .\bin\Release\net8.0-windows\win-x64\publish\BeamNGModManager.exe --self-test | Out-String
-          Write-Host $out
-          if ($out -notmatch "SELF-TEST PASSED") { throw "Security self-tests failed!" }
+          $p = Start-Process -FilePath ".\bin\Release\net8.0-windows\win-x64\publish\BeamNGModManager.exe" -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "Security self-tests failed with exit code $($p.ExitCode)!" }
+          Write-Host "All 6/6 Security & Lua Token-Stream Self-Tests Passed!" -ForegroundColor Green
 
       - name: Read Version and Compute SHA-256
         id: meta
@@ -47,9 +47,8 @@ jobs:
           name: "BeamModManager Ultimate ${{ steps.meta.outputs.version }}"
           body: |
             ### BeamModManager Ultimate ${{ steps.meta.outputs.version }}
-            - **File:** `BeamNGModManager.exe` (Portable Single-File x64)
+            - **File:** `BeamNGModManager.exe` (Windows 10/11 x64 Self-Contained Portable)
             - **SHA-256 Checksum:** `${{ steps.meta.outputs.sha256 }}`
-            - **CI Security Self-Tests:** Passed (Lexer, Deobfuscator, AST Alias/Indexing, Benign Script Check)
           generate_release_notes: true
           files: bin/Release/net8.0-windows/win-x64/publish/BeamNGModManager.exe
         env:
