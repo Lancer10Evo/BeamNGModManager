@@ -629,7 +629,7 @@ public class SecurityScannerService
             failures.Add("Test 4 Failed: False positive on benign BeamNG vehicle script.");
 
         return (failures.Count == 0, failures.Count == 0
-            ? $"Все автотесты безопасности (4/4: Lexer, Deobfuscator, AST Alias/Dynamic Indexing, Benign BeamNG Script) успешно пройдены!"
+            ? "[SELF-TEST PASSED] All 4/4 security unit tests passed (Lexer, Deobfuscator, AST Alias/Dynamic Indexing, Benign BeamNG Script)."
             : "Ошибки автотестов:\n" + string.Join("\n", failures));
     }
     public static string StripLuaCommentsWithLexer(string code)

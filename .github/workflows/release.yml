@@ -26,8 +26,9 @@ jobs:
       - name: Run Security & Lexer/AST Self-Test Suite
         shell: pwsh
         run: |
-          .\bin\Release\net8.0-windows\win-x64\publish\BeamNGModManager.exe --self-test
-          if ($LASTEXITCODE -ne 0) { throw "Security self-tests failed!" }
+          $out = .\bin\Release\net8.0-windows\win-x64\publish\BeamNGModManager.exe --self-test | Out-String
+          Write-Host $out
+          if ($out -notmatch "SELF-TEST PASSED") { throw "Security self-tests failed!" }
 
       - name: Read Version and Compute SHA-256
         id: meta
