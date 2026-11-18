@@ -71,6 +71,13 @@ public partial class MainWindow : Window
             Environment.Exit(passed ? 0 : 1);
             return;
         }
+                if (Environment.GetCommandLineArgs().Contains("--self-test"))
+        {
+            var (passed, testReport) = SecurityScannerService.RunSelfTestSuite();
+            Console.WriteLine(testReport);
+            Environment.Exit(passed ? 0 : 1);
+            return;
+        }
         InitializeComponent();
         InitializeApp();
     }
