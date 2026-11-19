@@ -141,6 +141,8 @@ public class SecurityScanReport
 
 public class SecurityScannerService
 {
+    public static Task<string> ComputeSha256OnlyAsync(string filePath) => Task.Run(() => ComputeSha256(filePath));
+    public static (bool allPassed, string summary) RunSelfTestSuite() => RunSelfTests();
     private const int MaxNestedScanDepth = 3;
     private const long MaxSingleNestedArchiveBytes = 256L * 1024 * 1024;
     private const long MaxTotalNestedQuotaBytes = 512L * 1024 * 1024;
