@@ -6,7 +6,6 @@ namespace BeamNGModManager.Services;
 
 public class UpdateService
 {
-    // Укажите здесь ссылку на ваш GitHub-репозиторий для автопроверки релизов
     private const string GithubLatestReleaseApi =
         "https://api.github.com/repos/Lancer10Evo/BeamNGModManager/releases/latest";
 
@@ -14,15 +13,22 @@ public class UpdateService
     {
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("BeamNGModManager/1.0");
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BeamModManagerUltimate/3.0");
 
             string json = await client.GetStringAsync(GithubLatestReleaseApi);
             using var doc = JsonDocument.Parse(json);
 
-            // Читаем тег релиза (например, "v1.1.0" -> "1.1.0") и ссылку на страницу загрузки
             string tag = doc.RootElement.GetProperty("tag_name").GetString()?.TrimStart('v', 'V') ?? "1.0.0";
             string htmlUrl = doc.RootElement.GetProperty("html_url").GetString() ?? string.Empty;
+
+            // Строгая валидация ссылки (защита от подмены схемы URI)
+            if (!Uri.TryCreate(htmlUrl, UriKind.Absolute, out var uri) ||
+                uri.Scheme != Uri.UriSchemeHttps ||
+                !uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+            {
+                htmlUrl = "https://github.com/Lancer10Evo/BeamNGModManager/releases/latest";
+            }
 
             Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0);
             if (Version.TryParse(tag, out var latestVersion) && latestVersion > currentVersion)
@@ -30,11 +36,8 @@ public class UpdateService
                 return (true, latestVersion.ToString(), htmlUrl);
             }
         }
-        catch
-        {
-            // При отсутствии подключения к интернету тихо возвращаем false без сбоев
-        }
+        catch { }
 
-        return (false, "1.0.0", string.Empty);
+        return (false, "3.0.0", string.Empty);
     }
 }

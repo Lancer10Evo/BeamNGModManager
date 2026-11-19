@@ -35,6 +35,23 @@ public partial class ModHubWindow : Window
         "sharemods.com"
     };
 
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        try
+        {
+            IntPtr hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            int dark = 1;
+            _ = DwmSetWindowAttribute(hwnd, 20, ref dark, sizeof(int));
+            int cap = 0x00141111;
+            _ = DwmSetWindowAttribute(hwnd, 35, ref cap, sizeof(int));
+        }
+        catch { }
+    }
+
     public ModHubWindow(SmartInstallerService installer, string targetModsDir, Func<Task> onModInstalledCallback, string vtApiKey = "")
     {
         InitializeComponent();

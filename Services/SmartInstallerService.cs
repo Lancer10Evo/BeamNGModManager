@@ -8,11 +8,17 @@ namespace BeamNGModManager.Services;
 public class SmartInstallerService
 {
     private const int MaxRecursionDepth = 3;
-    private const long MaxExtractedBytesLimit = 4L * 1024 * 1024 * 1024; // 4 GB реальных прочитанных байт
+    private const int MaxEntriesPerArchive = 15_000;
+    private const long MaxExtractedBytesLimit = 4L * 1024 * 1024 * 1024; // 4 GB реальных байтов
 
     private static readonly HashSet<string> ValidBeamNgDirs = new(StringComparer.OrdinalIgnoreCase)
     {
         "vehicles", "levels", "lua", "art", "mod_info", "scripts", "ui", "core", "gameplay", "campaigns"
+    };
+
+    private static readonly HashSet<string> DangerousOrAdExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".url", ".html", ".htm", ".lnk", ".exe", ".dll", ".bat", ".cmd", ".ps1", ".vbs", ".scr", ".msi", ".hta"
     };
 
     public async Task<InstallResult> InstallArchivesAsync(IEnumerable<string> archivePaths, string targetModsDir)
@@ -28,7 +34,7 @@ public class SmartInstallerService
                 try
                 {
                     long totalBytesExtracted = 0;
-                    bool installedAny = ProcessSingleArchive(path, targetModsDir, result.InstalledFiles, 0, ref totalBytesExtracted);
+                    bool installedAny = ProcessSingleArchive(path, targetModsDir, result.InstalledFiles, currentDepth: 0, ref totalBytesExtracted);
                     if (!installedAny)
                         result.InvalidFiles.Add(Path.GetFileName(path));
                 }
@@ -67,15 +73,26 @@ public class SmartInstallerService
 
         try
         {
+            int entryCount = 0;
+            byte[] buffer = new byte[81920];
+
             using (var archive = ArchiveFactory.OpenArchive(archivePath))
             {
                 foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
                 {
                     if (string.IsNullOrWhiteSpace(entry.Key)) continue;
 
+                    // Защита от Symlink-атак внутри архивов
+                    if (!string.IsNullOrEmpty(entry.LinkTarget))
+                        continue;
+
+                    if (++entryCount > MaxEntriesPerArchive)
+                        throw new InvalidOperationException("Превышен лимит числа файлов в архиве (защита от archive bomb).");
+
+                    // Строгая проверка Zip-Slip
                     string destFilePath = Path.GetFullPath(Path.Combine(tempDir, entry.Key));
                     if (!destFilePath.StartsWith(fullTempRoot, StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidOperationException("Zip-Slip path traversal blocked.");
+                        throw new InvalidOperationException("Заблокирована попытка выхода файла за пределы временной папки (Zip-Slip).");
 
                     string? destDir = Path.GetDirectoryName(destFilePath);
                     if (!string.IsNullOrEmpty(destDir))
@@ -83,7 +100,16 @@ public class SmartInstallerService
 
                     using var inStream = entry.OpenEntryStream();
                     using var outStream = File.Create(destFilePath);
-                    CopyStreamWithRealLimit(inStream, outStream, ref totalBytesExtracted, MaxExtractedBytesLimit);
+
+                    // Считаем РЕАЛЬНО прочитанные байты (невозможно обмануть поддельным entry.Size)
+                    int read;
+                    while ((read = inStream.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        totalBytesExtracted += read;
+                        if (totalBytesExtracted > MaxExtractedBytesLimit)
+                            throw new InvalidOperationException("Превышен безопасный лимит реально распакованных байтов (4 ГБ).");
+                        outStream.Write(buffer, 0, read);
+                    }
                 }
             }
 
@@ -112,7 +138,7 @@ public class SmartInstallerService
             string? modRoot = FindBeamNgStructureRoot(tempDir);
             if (modRoot != null)
             {
-                CleanAdFiles(modRoot);
+                CleanAdAndDangerousFiles(modRoot);
 
                 string zipName = Path.GetFileNameWithoutExtension(archivePath) + ".zip";
                 string destZip = GetUniqueDestinationPath(targetModsDir, zipName);
@@ -133,47 +159,37 @@ public class SmartInstallerService
         }
     }
 
-    public static void CopyStreamWithRealLimit(Stream input, Stream output, ref long totalBytesCounter, long maxBytesAllowed)
-    {
-        byte[] buffer = new byte[81920];
-        int read;
-        while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
-        {
-            totalBytesCounter += read;
-            if (totalBytesCounter > maxBytesAllowed)
-                throw new InvalidOperationException($"Превышен лимит реального объёма распаковки ({maxBytesAllowed / 1024 / 1024} MB).");
-
-            output.Write(buffer, 0, read);
-        }
-    }
-
     private bool IsCleanDirectZipMod(string zipPath)
     {
         try
         {
             using var archive = ZipFile.OpenRead(zipPath);
+            if (archive.Entries.Count > MaxEntriesPerArchive)
+                return false;
+
             bool hasValidRootDir = false;
-            bool hasNestedArchives = false;
 
             foreach (var entry in archive.Entries)
             {
                 string norm = entry.FullName.Replace('\\', '/').TrimStart('/');
-                if (norm.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
-                    norm.EndsWith(".rar", StringComparison.OrdinalIgnoreCase) ||
-                    norm.EndsWith(".7z", StringComparison.OrdinalIgnoreCase))
-                {
-                    hasNestedArchives = true;
-                    break;
-                }
+                if (norm.Contains("..", StringComparison.Ordinal))
+                    return false;
+
+                string ext = Path.GetExtension(norm).ToLowerInvariant();
+                if (ext is ".zip" or ".rar" or ".7z" || DangerousOrAdExtensions.Contains(ext))
+                    return false;
 
                 string topFolder = norm.Split('/')[0];
                 if (ValidBeamNgDirs.Contains(topFolder))
                     hasValidRootDir = true;
             }
 
-            return hasValidRootDir && !hasNestedArchives;
+            return hasValidRootDir;
         }
-        catch { return false; }
+        catch
+        {
+            return false;
+        }
     }
 
     public bool ValidateZipFile(string zipPath)
@@ -183,13 +199,20 @@ public class SmartInstallerService
             using var archive = ZipFile.OpenRead(zipPath);
             foreach (var entry in archive.Entries)
             {
-                string topFolder = entry.FullName.Replace('\\', '/').TrimStart('/').Split('/')[0];
+                string norm = entry.FullName.Replace('\\', '/').TrimStart('/');
+                if (norm.Contains("..", StringComparison.Ordinal))
+                    return false;
+
+                string topFolder = norm.Split('/')[0];
                 if (ValidBeamNgDirs.Contains(topFolder))
                     return true;
             }
             return false;
         }
-        catch { return false; }
+        catch
+        {
+            return false;
+        }
     }
 
     private string? FindBeamNgStructureRoot(string extractedRoot)
@@ -202,6 +225,7 @@ public class SmartInstallerService
             if (HasBeamNgSystemFolders(subDir))
                 return subDir;
         }
+
         return null;
     }
 
@@ -212,12 +236,11 @@ public class SmartInstallerService
             .Any(name => name != null && ValidBeamNgDirs.Contains(name));
     }
 
-    private void CleanAdFiles(string dirPath)
+    private void CleanAdAndDangerousFiles(string dirPath)
     {
-        foreach (string file in Directory.GetFiles(dirPath, "*.*", SearchOption.TopDirectoryOnly))
+        foreach (string file in Directory.GetFiles(dirPath, "*.*", SearchOption.AllDirectories))
         {
-            string ext = Path.GetExtension(file).ToLowerInvariant();
-            if (ext is ".url" or ".html" or ".htm" or ".lnk" or ".exe" or ".bat" or ".cmd" or ".ps1")
+            if (DangerousOrAdExtensions.Contains(Path.GetExtension(file)))
             {
                 try { File.Delete(file); } catch { }
             }
@@ -245,6 +268,7 @@ public class SmartInstallerService
             disabledCandidate = Path.Combine(disabledDir, numberedName);
             counter++;
         }
+
         return candidatePath;
     }
 }

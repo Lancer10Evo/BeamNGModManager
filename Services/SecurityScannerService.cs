@@ -80,7 +80,7 @@ public class SecurityScanReport
     {
         double mb = FileSizeBytes / 1024.0 / 1024.0;
         var sb = new StringBuilder();
-        sb.AppendLine($"ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v2.8.1)");
+        sb.AppendLine($"ОТЧЁТ БЕЗОПАСНОСТИ (Security Audit v3.0)");
         sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         sb.AppendLine($"Файл: {FileName} ({mb:F2} MB)");
         sb.AppendLine($"Источник: {SourceOrigin}");
@@ -403,6 +403,11 @@ public class SecurityScannerService
         foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
         {
             string entryName = entry.Key?.Replace('\\', '/') ?? "";
+            if (entryName.Contains("..", StringComparison.Ordinal) || Path.IsPathRooted(entryName) || !string.IsNullOrEmpty(entry.LinkTarget))
+            {
+                report.DangerousBinariesFound.Add($"[Zip-Slip / Symlink] {entryName}");
+                continue;
+            }
             string ext = Path.GetExtension(entryName).ToLowerInvariant();
             string displayPath = currentDepth == 0 ? entryName : $"{containerName} -> {entryName}";
 
@@ -598,9 +603,16 @@ public class SecurityScannerService
                 }
             }
             // 2. Динамическая кодогенерация и метатаблицы окружения
+            else if (id == "require" && i + 2 < tokens.Count && tokens[i + 1].Value is "(" or "\"" or "'" || (id == "require" && i + 1 < tokens.Count && tokens[i + 1].Type == LuaTokenType.StringLiteral))
+            {
+                string reqArg = (i + 2 < tokens.Count && tokens[i + 2].Type == LuaTokenType.StringLiteral) ? tokens[i + 2].Value :
+                                (i + 1 < tokens.Count && tokens[i + 1].Type == LuaTokenType.StringLiteral) ? tokens[i + 1].Value : "";
+                if (reqArg.Equals("ffi", StringComparison.OrdinalIgnoreCase) || reqArg.Equals("os", StringComparison.OrdinalIgnoreCase) || reqArg.Equals("io", StringComparison.OrdinalIgnoreCase))
+                    criticals.Add($"{fileLabel}: Загрузка системного модуля через require('{reqArg}')");
+            }
             else if (id is "load" or "loadstring" or "dofile" or "loadfile" or "setfenv" or "getfenv" or "rawget")
             {
-                if (i + 1 < tokens.Count && tokens[i + 1].Type == LuaTokenType.Symbol && tokens[i + 1].Value == "(")
+                bool isLhs = (i + 1 < tokens.Count && tokens[i + 1].Value == "="); if (!isLhs)
                 {
                     if (id is "dofile" or "loadfile")
                         criticals.Add($"{fileLabel}: Загрузка внешнего скрипта с диска ({id})");
@@ -898,14 +910,14 @@ public class SecurityScannerService
             var psi = new ProcessStartInfo
             {
                 FileName = mpCmdRun,
-                Arguments = $"-Scan -ScanType 3 -File \"{filePath}\" -DisableRemediation",
+                Arguments = "",
                 CreateNoWindow = true,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
 
-            using var proc = Process.Start(psi);
+            psi.ArgumentList.Add("-Scan"); psi.ArgumentList.Add("-ScanType"); psi.ArgumentList.Add("3"); psi.ArgumentList.Add("-File"); psi.ArgumentList.Add(filePath); psi.ArgumentList.Add("-DisableRemediation"); using var proc = Process.Start(psi);
             if (proc == null)
             {
                 report.DefenderConfirmedClean = false;

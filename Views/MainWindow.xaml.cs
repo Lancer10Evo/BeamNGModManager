@@ -40,27 +40,35 @@ public partial class MainWindow : Window
 
     private async void BtnScanSelectedMod_Click(object sender, RoutedEventArgs e)
     {
-        if (GridMods.SelectedItem is ModItem mod && File.Exists(mod.FullPath))
+        try
         {
-            LblStatus.Text = $"Проверка мода: {mod.FileName}...";
-            var report = await _securityScanner.ScanArchiveAsync(mod.FullPath, null, _pathResolver.Config.GetVtApiKey());
-            LblStatus.Text = _loc.Get("drag_drop_hint");
-            if (MessageBox.Show(report.BuildFormattedSummary() + "\n\nОткрыть страницу хеша этого мода на VirusTotal?",
-                "Отчёт проверки установленного мода", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+            if (GridMods.SelectedItem is ModItem mod && File.Exists(mod.FullPath))
             {
-                Process.Start(new ProcessStartInfo(report.VirusTotalUrl) { UseShellExecute = true });
+                LblStatus.Text = $"Проверка мода: {mod.FileName}...";
+                var report = await _securityScanner.ScanArchiveAsync(mod.FullPath, null, _pathResolver.Config.GetVtApiKey());
+                LblStatus.Text = _loc.Get("drag_drop_hint");
+                if (MessageBox.Show(report.BuildFormattedSummary() + "\n\nОткрыть страницу хеша этого мода на VirusTotal?",
+                    "Отчёт проверки установленного мода", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+                {
+                    Process.Start(new ProcessStartInfo(report.VirusTotalUrl) { UseShellExecute = true });
+                }
             }
         }
+        catch (Exception ex) { MessageBox.Show($"Ошибка проверки: {ex.Message}", Title, MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
     private async void BtnCopySelectedModHash_Click(object sender, RoutedEventArgs e)
     {
-        if (GridMods.SelectedItem is ModItem mod && File.Exists(mod.FullPath))
+        try
         {
-            string hash = await SecurityScannerService.ComputeSha256OnlyAsync(mod.FullPath);
-            Clipboard.SetText(hash);
-            LblStatus.Text = $"SHA-256 скопирован: {hash}";
+            if (GridMods.SelectedItem is ModItem mod && File.Exists(mod.FullPath))
+            {
+                string hash = await SecurityScannerService.ComputeSha256OnlyAsync(mod.FullPath);
+                Clipboard.SetText(hash);
+                LblStatus.Text = $"SHA-256 скопирован: {hash}";
+            }
         }
+        catch (Exception ex) { MessageBox.Show($"Ошибка вычисления хеша: {ex.Message}", Title, MessageBoxButton.OK, MessageBoxImage.Error); }
     }
     public MainWindow()
     {
@@ -193,6 +201,8 @@ public partial class MainWindow : Window
             BadgeCategory.Text = mod.Category;
             BadgeSource.Text = mod.SourceTag;
             BadgeStatus.Text = mod.IsEnabled ? "АКТИВЕН" : "ОТКЛЮЧЁН";
+            BadgeStatus.Foreground = mod.IsEnabled ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129)) : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(245, 158, 11));
+            BadgeStatusBorder.BorderBrush = BadgeStatus.Foreground;
 
             TxtInspectorAuthor.Text = mod.Author;
             TxtInspectorGameId.Text = mod.GameId;
@@ -463,6 +473,45 @@ public partial class MainWindow : Window
 
         MessageBox.Show($"🎛️ Loadout «{customName}» сохранён!\nАктивных модов в сборке: {enabledFiles.Count}",
             Title, MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void BtnExportPresets_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dlg = new SaveFileDialog { Filter = "BeamModManager Loadouts (*.json)|*.json", FileName = "beamng_loadouts.json" };
+            if (dlg.ShowDialog() == true)
+            {
+                string json = System.Text.Json.JsonSerializer.Serialize(_pathResolver.Config.Presets, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(dlg.FileName, json, System.Text.Encoding.UTF8);
+                MessageBox.Show($"Экспортировано сборок: {_pathResolver.Config.Presets.Count}", Title, MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex) { MessageBox.Show($"Ошибка экспорта: {ex.Message}", Title, MessageBoxButton.OK, MessageBoxImage.Error); }
+    }
+
+    private void BtnImportPresets_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dlg = new OpenFileDialog { Filter = "BeamModManager Loadouts (*.json)|*.json" };
+            if (dlg.ShowDialog() == true)
+            {
+                var imported = System.Text.Json.JsonSerializer.Deserialize<List<ModPreset>>(File.ReadAllText(dlg.FileName, System.Text.Encoding.UTF8));
+                if (imported != null && imported.Count > 0)
+                {
+                    foreach (var p in imported)
+                    {
+                        if (!_pathResolver.Config.Presets.Any(x => x.Name.Equals(p.Name, StringComparison.OrdinalIgnoreCase)))
+                            _pathResolver.Config.Presets.Add(p);
+                    }
+                    _pathResolver.SaveConfig();
+                    RefreshPresetsCombo();
+                    MessageBox.Show($"Импортировано сборок: {imported.Count}", Title, MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+        }
+        catch (Exception ex) { MessageBox.Show($"Ошибка импорта: {ex.Message}", Title, MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
     private void BtnDeletePreset_Click(object sender, RoutedEventArgs e)
